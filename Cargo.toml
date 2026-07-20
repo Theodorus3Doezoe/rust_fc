@@ -3,6 +3,9 @@ name = "embassy-rp-test"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+tenstar_devboard = []
+
 [dependencies]
 cortex-m-rt = "0.7.5"
 defmt = "1.1.1"
@@ -12,8 +15,16 @@ embassy-executor = { version = "0.10.0", features = [
   "executor-thread",
   "defmt",
 ] }
-embassy-rp = { version = "0.10.0", features = ["rp235xa", "defmt", "time-driver", "critical-section-impl"] }
+embassy-rp = { version = "0.10.0", features = [
+  "rp235xa",
+  "defmt",
+  "time-driver",
+  "critical-section-impl",
+] }
 embassy-time = { version = "0.5.1", features = ["defmt"] }
+embassy-usb = { version = "0.6.0", features = ["defmt"] }
+embassy-usb-logger = "0.6.0"
 heapless = "0.9.3"
+log = "0.4.33"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 vqf-rs = { version = "0.3.0", default-features = false, features = ["libm"] }
