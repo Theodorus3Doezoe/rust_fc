@@ -11,7 +11,7 @@ biquad = "0.6.0"
 cortex-m-rt = "0.7.5"
 defmt = "1.1.1"
 defmt-rtt = "1.3.0"
-embassy-embedded-hal = "0.6.0"
+embassy-embedded-hal = { version = "0.6.0", features = ["defmt"] }
 embassy-executor = { version = "0.10.0", features = [
   "platform-cortex-m",
   "executor-thread",
