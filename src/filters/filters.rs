@@ -1,3 +1,4 @@
+use crate::ImuGyro;
 use biquad::*;
 
 pub struct GyroFilter {
@@ -23,7 +24,11 @@ impl GyroFilter {
         }
     }
 
-    pub fn apply(&mut self, x: f32, y: f32, z: f32) -> (f32, f32, f32) {
-        (self.x.run(x), self.y.run(y), self.z.run(z))
+    pub fn apply(&mut self, gyro: ImuGyro) -> ImuGyro {
+        ImuGyro {
+            x_dps: self.x.run(gyro.x_dps),
+            y_dps: self.y.run(gyro.y_dps),
+            z_dps: self.z.run(gyro.z_dps),
+        }
     }
 }
