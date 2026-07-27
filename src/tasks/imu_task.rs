@@ -1,56 +1,45 @@
-static IMU_SIGNAL: Signal<CriticalSectionRawMutex, ImuData> = Signal::new();
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
+use embassy_time::{Duration, Instant, Ticker};
+
+use crate::calibration::calib_imu::calibrate;
+use crate::drivers::sensors::mpu6500::{ImuData, Mpu6500};
+use crate::filters::filters::GyroFilter;
+
+pub static IMU_SIGNAL: Signal<CriticalSectionRawMutex, ImuData> = Signal::new();
 
 #[embassy_executor::task]
-async fn imu_task(mut mpu: Mpu6500) {
+pub async fn imu_task(mut mpu: Mpu6500) {
     mpu.init().await;
-    defmt::info!("Calibrating, keep sensor still...");
     let bias = calibrate(&mut mpu, 1000).await;
-    defmt::info!("Calibrating finished: {}", bias);
 
     let mut gyro_filter = GyroFilter::new(8000.0, 80.0);
+    let ticker = Ticker::every(Duration::from_hz(8000));
+
     let mut ticker = Ticker::every(Duration::from_hz(8000));
-
-    let mut timecounter: u32 = 0;
-    let mut max_duration: Duration = Duration::from_micros(0);
-    let mut time_read_burst: Duration = Duration::from_micros(0);
-    const TICK_BUDGET: Duration = Duration::from_hz(8000);
-
+    const TICK_BUDGET: Duration = Duration::from_micros(125);
     loop {
         let start = Instant::now();
 
-        let raw = mpu.read_burst().await;
-
-        if let Some(raw) = raw {
-            let mut imu = bias.apply(raw.convert());
-            time_read_burst = start.elapsed();
-
-            imu.gyro = gyro_filter.apply(imu.gyro);
-
-            IMU_SIGNAL.signal(imu);
-        }
-        let end = start.elapsed();
-
-        if timecounter.is_multiple_of(400) {
-            log::info!(
-                "burst_duration:{} total_duration:{} max_duration:{}",
-                time_read_burst,
-                end,
-                max_duration
-            );
+        match mpu.read_imu().await {
+            Ok(imu) => {
+                let mut imu = bias.apply(imu);
+                imu.gyro = gyro_filter.apply(imu.gyro);
+                IMU_SIGNAL.signal(imu);
+            }
+            Err(e) => {
+                defmt::warn!("IMU uitlezen mislukt: {:?}", e);
+            }
         }
 
-        if end > TICK_BUDGET {
+        let duration = start.elapsed();
+        if duration > TICK_BUDGET {
             defmt::warn!(
-                "IMU overrun! Loop duurde {} µs (budget is {} µs)",
-                end.as_micros(),
+                "IMU OVERRUN! Duurde {} us (budget {} us)",
+                duration.as_micros(),
                 TICK_BUDGET.as_micros()
             );
         }
-
-        if end > max_duration {
-            max_duration = end;
-        }
-        timecounter += 1;
 
         ticker.next().await;
     }

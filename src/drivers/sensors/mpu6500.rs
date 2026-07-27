@@ -1,16 +1,22 @@
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
+use embassy_rp::gpio::Output;
+use embassy_rp::peripherals::SPI0;
+use embassy_rp::spi::{Async, Error as SpiError, Spi};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embedded_hal_async::spi::SpiDevice as _;
+
 const CONFIG: u8 = 0x1A;
 const GYRO_CONFIG: u8 = 0x1B;
 const ACCEL_CONFIG: u8 = 0x1C;
 const ACCEL_GYRO_START: u8 = 0x3B | 0x80;
 
-const BASE_CLOCK: u32 = 10_000_000;
-const INIT_CLOCK: u32 = 1_000_000;
+pub const BASE_CLOCK: u32 = 10_000_000;
 
 #[derive(defmt::Format)]
-struct ImuAccel {
-    x_g: f32,
-    y_g: f32,
-    z_g: f32,
+pub struct ImuAccel {
+    pub x_g: f32,
+    pub y_g: f32,
+    pub z_g: f32,
 }
 
 #[derive(defmt::Format)]
@@ -20,19 +26,20 @@ pub struct ImuGyro {
     pub z_dps: f32,
 }
 
+#[derive(defmt::Format)]
 pub struct ImuData {
     pub accel: ImuAccel,
     pub gyro: ImuGyro,
 }
 
-struct RawImuData {
-    accel_x: i16,
-    accel_y: i16,
-    accel_z: i16,
-    temp: i16,
-    gyro_x: i16,
-    gyro_y: i16,
-    gyro_z: i16,
+pub struct RawImuData {
+    pub accel_x: i16,
+    pub accel_y: i16,
+    pub accel_z: i16,
+    pub temp: i16,
+    pub gyro_x: i16,
+    pub gyro_y: i16,
+    pub gyro_z: i16,
 }
 
 impl RawImuData {
@@ -55,51 +62,43 @@ impl RawImuData {
     }
 }
 
-struct Mpu6500 {
-    spi: SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, SPI0, Async>, Output<'static>>,
-    spi_bus: &'static Spi0Bus,
+pub struct Mpu6500 {
+    spi: Spi<'static, SPI0, Async>,
+    cs: Output<'static>,
 }
 
 impl Mpu6500 {
-    pub fn new(spi_bus: &'static Spi0Bus, cs: Output<'static>) -> Self {
-        Self {
-            spi: SpiDevice::new(spi_bus, cs),
-            spi_bus,
-        }
+    pub fn new(spi: Spi<'static, SPI0, Async>, cs: Output<'static>) -> Self {
+        Self { spi, cs }
     }
 
     pub async fn init(&mut self) {
-        self.spi_bus.lock().await.set_frequency(INIT_CLOCK);
-        self.spi.write(&[CONFIG, 0b0000_0000]).await.unwrap(); // DLPF_CFG, genegeerd in bypass
-        self.spi.write(&[GYRO_CONFIG, 0b0000_1011]).await.unwrap(); // FS_SEL=1, FCHOICE_B=11 (bypass, ~3600Hz)
+        self.spi.write(&[CONFIG, 0b0000_0000]).await.unwrap();
+        self.spi.write(&[GYRO_CONFIG, 0b0000_1011]).await.unwrap();
         self.spi.write(&[ACCEL_CONFIG, 0b0000_1000]).await.unwrap();
-        self.spi_bus.lock().await.set_frequency(BASE_CLOCK);
+        self.spi.set_frequency(BASE_CLOCK);
     }
 
-    pub async fn read_burst(&mut self) -> Option<RawImuData> {
-        let mut tx_buf = [0u8; 15];
-        tx_buf[0] = ACCEL_GYRO_START;
-        let mut rx_buf = [0u8; 15];
+    pub async fn read_burst(&mut self) -> Result<RawImuData, SpiError> {
+        let mut buf = [0u8; 15];
+        buf[0] = ACCEL_GYRO_START;
 
-        match self.spi.transfer(&mut rx_buf, &tx_buf).await {
-            Ok(()) => Some(RawImuData {
-                accel_x: i16::from_be_bytes([rx_buf[1], rx_buf[2]]),
-                accel_y: i16::from_be_bytes([rx_buf[3], rx_buf[4]]),
-                accel_z: i16::from_be_bytes([rx_buf[5], rx_buf[6]]),
-                temp: i16::from_be_bytes([rx_buf[7], rx_buf[8]]),
-                gyro_x: i16::from_be_bytes([rx_buf[9], rx_buf[10]]),
-                gyro_y: i16::from_be_bytes([rx_buf[11], rx_buf[12]]),
-                gyro_z: i16::from_be_bytes([rx_buf[13], rx_buf[14]]),
-            }),
-            Err(e) => {
-                defmt::warn!("SPI transfer failed: {}", e);
-                None
-            }
-        }
+        // transfer_in_place (of transfer met 1 buffer) stuurt buf en overschrijft het met de gelezen data
+        self.spi.transfer_in_place(&mut buf).await?;
+
+        Ok(RawImuData {
+            accel_x: i16::from_be_bytes([buf[1], buf[2]]),
+            accel_y: i16::from_be_bytes([buf[3], buf[4]]),
+            accel_z: i16::from_be_bytes([buf[5], buf[6]]),
+            temp: i16::from_be_bytes([buf[7], buf[8]]),
+            gyro_x: i16::from_be_bytes([buf[9], buf[10]]),
+            gyro_y: i16::from_be_bytes([buf[11], buf[12]]),
+            gyro_z: i16::from_be_bytes([buf[13], buf[14]]),
+        })
     }
 
-    // aanpassen voor dit inpv in imu task
-    // pub async fn read_imu(&mut self) -> Option<ImuData> {
-    //     self.read_burst().await.map(|raw| raw.convert())
-    // }
+    pub async fn read_imu(&mut self) -> Result<ImuData, SpiError> {
+        let raw = self.read_burst().await?;
+        Ok(raw.convert())
+    }
 }

@@ -16,6 +16,7 @@ embassy-executor = { version = "0.10.0", features = [
   "platform-cortex-m",
   "executor-thread",
   "defmt",
+  "executor-interrupt",
 ] }
 embassy-rp = { version = "0.10.0", features = [
   "rp235xa",
@@ -28,6 +29,7 @@ embassy-time = { version = "0.5.1", features = ["defmt"] }
 embassy-usb = { version = "0.6.0", features = ["defmt"] }
 embassy-usb-logger = "0.6.0"
 embedded-hal-async = "1.0.0"
+embedded-hal-bus = "0.3.0"
 heapless = "0.9.3"
 log = "0.4.33"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
