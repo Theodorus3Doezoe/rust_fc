@@ -1,36 +1,10 @@
-use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use embassy_rp::gpio::Output;
-use embassy_rp::peripherals::SPI0;
-use embassy_rp::spi::{Async, Error as SpiError, Spi};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embedded_hal_async::spi::SpiDevice as _;
+use crate::imu::{Imu, ImuAccel, ImuData, ImuGyro};
+use embedded_hal_async::spi::SpiDevice;
 
 const CONFIG: u8 = 0x1A;
 const GYRO_CONFIG: u8 = 0x1B;
 const ACCEL_CONFIG: u8 = 0x1C;
 const ACCEL_GYRO_START: u8 = 0x3B | 0x80;
-
-pub const BASE_CLOCK: u32 = 10_000_000;
-
-#[derive(defmt::Format)]
-pub struct ImuAccel {
-    pub x_g: f32,
-    pub y_g: f32,
-    pub z_g: f32,
-}
-
-#[derive(defmt::Format)]
-pub struct ImuGyro {
-    pub x_dps: f32,
-    pub y_dps: f32,
-    pub z_dps: f32,
-}
-
-#[derive(defmt::Format)]
-pub struct ImuData {
-    pub accel: ImuAccel,
-    pub gyro: ImuGyro,
-}
 
 pub struct RawImuData {
     pub accel_x: i16,
@@ -62,28 +36,29 @@ impl RawImuData {
     }
 }
 
-pub struct Mpu6500 {
-    spi: Spi<'static, SPI0, Async>,
-    cs: Output<'static>,
+pub struct Mpu6500<SPI: SpiDevice> {
+    spi: SPI,
 }
 
-impl Mpu6500 {
-    pub fn new(spi: Spi<'static, SPI0, Async>, cs: Output<'static>) -> Self {
-        Self { spi, cs }
+impl<SPI: SpiDevice> Mpu6500<SPI> {
+    pub fn new(spi: SPI) -> Self {
+        Self { spi }
     }
 
-    pub async fn init(&mut self) {
-        self.spi.write(&[CONFIG, 0b0000_0000]).await.unwrap();
-        self.spi.write(&[GYRO_CONFIG, 0b0000_1011]).await.unwrap();
-        self.spi.write(&[ACCEL_CONFIG, 0b0000_1000]).await.unwrap();
-        self.spi.set_frequency(BASE_CLOCK);
+    pub async fn init_registers(&mut self) -> Result<(), SPI::Error> {
+        defmt::info!("writing config");
+        self.spi.write(&[CONFIG, 0b0000_0000]).await?;
+        defmt::info!("writing gyro");
+        self.spi.write(&[GYRO_CONFIG, 0b0000_1011]).await?;
+        defmt::info!("writing accel");
+        self.spi.write(&[ACCEL_CONFIG, 0b0000_1000]).await?;
+        defmt::info!("done writing registers");
+        Ok(())
     }
 
-    pub async fn read_burst(&mut self) -> Result<RawImuData, SpiError> {
+    pub async fn read_burst(&mut self) -> Result<RawImuData, SPI::Error> {
         let mut buf = [0u8; 15];
         buf[0] = ACCEL_GYRO_START;
-
-        // transfer_in_place (of transfer met 1 buffer) stuurt buf en overschrijft het met de gelezen data
         self.spi.transfer_in_place(&mut buf).await?;
 
         Ok(RawImuData {
@@ -96,9 +71,22 @@ impl Mpu6500 {
             gyro_z: i16::from_be_bytes([buf[13], buf[14]]),
         })
     }
+}
 
-    pub async fn read_imu(&mut self) -> Result<ImuData, SpiError> {
+impl<SPI: SpiDevice> Imu for Mpu6500<SPI> {
+    type Error = SPI::Error;
+    type SpiBus = SPI;
+
+    async fn init(&mut self) -> Result<(), Self::Error> {
+        self.init_registers().await
+    }
+
+    async fn read(&mut self) -> Result<ImuData, Self::Error> {
         let raw = self.read_burst().await?;
         Ok(raw.convert())
+    }
+
+    fn spi_device_mut(&mut self) -> &mut Self::SpiBus {
+        &mut self.spi
     }
 }
