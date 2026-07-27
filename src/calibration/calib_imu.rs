@@ -1,5 +1,8 @@
+use crate::drivers::sensors::mpu6500::{ImuAccel, ImuData, ImuGyro, Mpu6500};
+use embassy_time::Timer;
+
 #[derive(defmt::Format)]
-struct ImuBias {
+pub struct ImuBias {
     gyro_x_dps: f32,
     gyro_y_dps: f32,
     gyro_z_dps: f32,
@@ -9,7 +12,7 @@ struct ImuBias {
 }
 
 impl ImuBias {
-    fn apply(&self, raw: ImuData) -> ImuData {
+    pub fn apply(&self, raw: ImuData) -> ImuData {
         ImuData {
             accel: ImuAccel {
                 x_g: raw.accel.x_g - self.accel_x_g,
@@ -25,7 +28,8 @@ impl ImuBias {
     }
 }
 
-async fn calibrate(mpu: &mut Mpu6500, samples: u32) -> ImuBias {
+pub async fn calibrate(mpu: &mut Mpu6500, samples: u32) -> ImuBias {
+    defmt::info!("Calibrating, keep sensor still...");
     let mut sum_ax = 0.0;
     let mut sum_ay = 0.0;
     let mut sum_az = 0.0;
@@ -36,19 +40,24 @@ async fn calibrate(mpu: &mut Mpu6500, samples: u32) -> ImuBias {
     let mut n: f32 = 0.0;
 
     for _ in 0..samples {
-        let raw = mpu.read_burst().await;
-        if let Some(raw) = raw {
-            let imu = raw.convert();
-            sum_ax += imu.accel.x_g;
-            sum_ay += imu.accel.y_g;
-            sum_az += imu.accel.z_g;
-            sum_gx += imu.gyro.x_dps;
-            sum_gy += imu.gyro.y_dps;
-            sum_gz += imu.gyro.z_dps;
-            n += 1.0;
+        match mpu.read_burst().await {
+            Ok(raw) => {
+                let imu = raw.convert();
+                sum_ax += imu.accel.x_g;
+                sum_ay += imu.accel.y_g;
+                sum_az += imu.accel.z_g;
+                sum_gx += imu.gyro.x_dps;
+                sum_gy += imu.gyro.y_dps;
+                sum_gz += imu.gyro.z_dps;
+                n += 1.0;
+            }
+            Err(e) => {
+                defmt::warn!("Mislukt tijdens calibratie: {:?}", e);
+            }
         }
-        Timer::after_micros(500).await
+        Timer::after_micros(500).await;
     }
+    defmt::info!("Calibrating finished");
 
     ImuBias {
         accel_x_g: sum_ax / n,

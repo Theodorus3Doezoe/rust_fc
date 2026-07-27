@@ -1,4 +1,4 @@
-use crate::ImuGyro;
+use crate::drivers::sensors::mpu6500::ImuGyro;
 use biquad::*;
 
 pub struct GyroFilter {
