@@ -4,9 +4,7 @@
 use defmt_rtt as _;
 use panic_probe as _;
 
-use embassy_executor::{InterruptExecutor, Spawner};
-use embassy_rp::interrupt;
-use embassy_rp::interrupt::{InterruptExt, Priority};
+use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
 
 mod boards;
@@ -14,38 +12,30 @@ mod calibration;
 mod config;
 mod drivers;
 mod filters;
+mod imu;
 mod tasks;
 mod types;
 
-use boards::rp2350_dev;
+use config::{ActiveImu, IMU_RUN_FREQ, init_board};
 use drivers::sensor_rig::SensorRig;
-use drivers::sensors::mpu6500::{ImuData, Mpu6500};
 use tasks::imu_task::{IMU_SIGNAL, imu_task};
 use tasks::logger_task::logger_task;
 
-static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
-
-#[interrupt]
-unsafe fn SWI_IRQ_1() {
-    EXECUTOR_HIGH.on_interrupt();
-}
-
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let board = rp2350_dev::init();
-
-    interrupt::SWI_IRQ_1.set_priority(Priority::P3);
-
-    let high_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
-
-    let rig = SensorRig::new(board.imu_spi, board.gyro_cs);
-    let mpu = rig.mpu();
-
-    high_spawner.spawn(imu_task(mpu).unwrap());
-
+    let board = init_board();
+    defmt::info!("iniatlizing board");
     _spawner.spawn(logger_task(board.usb_driver).unwrap());
+    defmt::info!("Spawned usb task");
 
-    let mut ticker = Ticker::every(Duration::from_hz(400));
+    let imu = SensorRig::create_imu(board.spi0, board.imu_cs, IMU_RUN_FREQ, ActiveImu::new)
+        .await
+        .expect("Failed to initialize IMU");
+
+    board.high_spawner.spawn(imu_task(imu).unwrap());
+    defmt::info!("Spanwed imu task");
+
+    let mut ticker = Ticker::every(Duration::from_hz(10));
 
     loop {
         if let Some(imu) = IMU_SIGNAL.try_take() {
@@ -59,15 +49,15 @@ async fn main(_spawner: Spawner) {
                 imu.gyro.z_dps
             );
 
-            defmt::info!(
-                "accel_x:{} accel_y:{} accel_z:{} gyro_x:{} gyro_y:{} gyro_z:{}",
-                imu.accel.x_g,
-                imu.accel.y_g,
-                imu.accel.z_g,
-                imu.gyro.x_dps,
-                imu.gyro.y_dps,
-                imu.gyro.z_dps
-            );
+            // defmt::info!(
+            //     "accel_x:{} accel_y:{} accel_z:{} gyro_x:{} gyro_y:{} gyro_z:{}",
+            //     imu.accel.x_g,
+            //     imu.accel.y_g,
+            //     imu.accel.z_g,
+            //     imu.gyro.x_dps,
+            //     imu.gyro.y_dps,
+            //     imu.gyro.z_dps
+            // );
         }
 
         ticker.next().await;

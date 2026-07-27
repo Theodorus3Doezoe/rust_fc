@@ -1,7 +1,6 @@
-use embassy_rp::peripherals::USB;
-use embassy_rp::usb::Driver;
+use crate::config::ActiveUsbDriver;
 
 #[embassy_executor::task]
-pub async fn logger_task(driver: Driver<'static, USB>) {
+pub async fn logger_task(driver: ActiveUsbDriver) {
     embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
 }
