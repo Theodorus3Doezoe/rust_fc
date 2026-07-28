@@ -7,6 +7,8 @@ pub struct GyroFilter {
     z: DirectForm2Transposed<f32>,
 }
 
+// test pt1 filter and higher cutoff frequencies if phase delay is to prominent.
+// Later trusting mostly on rpm notch filter if possible to reduce delay
 impl GyroFilter {
     pub fn new(sample_rate_hz: f32, cutoff_hz: f32) -> Self {
         let coeffs = Coefficients::<f32>::from_params(
