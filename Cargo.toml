@@ -25,15 +25,19 @@ embassy-rp = { version = "0.10.0", features = [
   "critical-section-impl",
 ] }
 embassy-sync = "0.8.0"
+embassy-futures = "0.1.2"
 embassy-time = { version = "0.5.1", features = ["defmt"] }
 embassy-usb = { version = "0.6.0", features = ["defmt"] }
 embassy-usb-logger = "0.6.0"
 embedded-hal-async = "1.0.0"
 
 embedded-hal-bus = { version = "0.3", features = ["async"] }
+embedded-io = "0.7.1"
+embedded-io-async = "0.7.0"
 
 heapless = "0.9.3"
 log = "0.4.33"
+nalgebra = { version = "*", default-features = false, features = ["libm"] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 static_cell = "2.1.1"
-vqf-rs = { version = "0.3.0", default-features = false, features = ["libm"] }
+uf-ahrs = "0.2.1"

@@ -19,9 +19,9 @@ mod types;
 
 use config::{ActiveImu, IMU_RUN_FREQ, init_board};
 use drivers::sensor_rig::SensorRig;
+use tasks::attitude::attitude_task;
 use tasks::imu_task::{IMU_SIGNAL, imu_task};
 use tasks::logger_task::usb_logger;
-use tasks::rate::rate_task;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -36,7 +36,7 @@ async fn main(_spawner: Spawner) {
 
     board.high_spawner.spawn(imu_task(imu).unwrap());
     defmt::info!("Spanwed imu task");
-    board.high_spawner.spawn(rate_task().unwrap());
+    board.high_spawner.spawn(attitude_task().unwrap());
     defmt::info!("Spawned rate task");
 
     let mut ticker = Ticker::every(Duration::from_hz(10));
