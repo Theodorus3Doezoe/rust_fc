@@ -1,5 +1,9 @@
-pub use crate::boards::rp2350dev::rp2350dev as BoardType;
+pub use crate::boards::Board;
+pub use crate::sensors::Imu;
 
-pub use crate::sensors::mpu6500::Mpu6500 as ImuType;
-pub type ImuSpi = <BoardType as crate::boards::Board>::ImuSpi;
+pub type BoardType = crate::boards::rp2350dev::Rp2350Dev;
+pub type ImuType<SPI> = crate::sensors::mpu6500::Mpu6500<SPI>;
+
+pub type ImuSpi = <BoardType as Board>::ImuSpi;
+
 pub type ConcreteImu = ImuType<ImuSpi>;

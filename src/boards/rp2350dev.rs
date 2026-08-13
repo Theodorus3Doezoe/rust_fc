@@ -12,11 +12,11 @@ bind_interrupts!(struct Irqs {
                  dma::InterruptHandler<DMA_CH1>;
 });
 
-pub struct rp2350dev {
+pub struct Rp2350Dev {
     imu_spi: Option<ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, NoDelay>>,
 }
 
-impl Board for rp2350dev {
+impl Board for Rp2350Dev {
     type ImuSpi = ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, NoDelay>;
 
     fn init() -> Self {
