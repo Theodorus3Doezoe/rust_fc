@@ -1,3 +1,4 @@
+pub mod calibrated_imu;
 pub mod mpu6500;
 
 use embedded_hal_async::spi::SpiDevice;

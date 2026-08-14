@@ -58,6 +58,8 @@ impl<SPI: SpiDevice> Imu<SPI> for Mpu6500<SPI> {
         let mut buf = [0u8; 7];
         buf[0] = GYRO_START;
 
+        self.spi.transfer_in_place(&mut buf).await?;
+
         let raw_x = i16::from_be_bytes([buf[1], buf[2]]);
         let raw_y = i16::from_be_bytes([buf[3], buf[4]]);
         let raw_z = i16::from_be_bytes([buf[5], buf[6]]);
