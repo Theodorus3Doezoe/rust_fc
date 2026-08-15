@@ -29,7 +29,7 @@ pub struct Mpu6500<SPI> {
 }
 
 impl<SPI: SpiDevice> Mpu6500<SPI> {
-    pub async fn new(mut spi: SPI) -> Result<Self, SPI::Error> {
+    pub async fn init_registers(spi: &mut SPI) -> Result<(), SPI::Error> {
         let mut rx_buf = [0u8; 1];
         spi.transaction(&mut [
             Operation::Write(&[0x75 | 0x80]),
@@ -55,7 +55,9 @@ impl<SPI: SpiDevice> Mpu6500<SPI> {
         spi.write(&[ACCEL_CONFIG_2, ACCEL_BYPASS]).await?;
 
         defmt::info!("MPU6500 initalized");
-
+        Ok(())
+    }
+    pub async fn new(spi: SPI) -> Result<Self, SPI::Error> {
         Ok(Self { spi })
     }
 }
