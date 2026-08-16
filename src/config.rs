@@ -9,7 +9,7 @@ pub mod imu {
     use crate::sensors::calibrated_imu::CalibratedImu;
 
     pub const INIT_FREQ_HZ: u32 = 1_000_000;
-    pub const RUN_FREQ_HZ: u32 = 1_000_000;
+    pub const RUN_FREQ_HZ: u32 = 20_000_000;
 
     pub type Spi = <BoardType as Board>::ImuSpi;
     pub type Raw = SelectedImuDriver<Spi>;

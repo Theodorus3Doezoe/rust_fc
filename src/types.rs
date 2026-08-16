@@ -4,3 +4,9 @@ pub struct Vector3D {
     pub y: f32,
     pub z: f32,
 }
+
+#[derive(Debug, Clone, Copy, defmt::Format)]
+pub struct ImuBurst {
+    pub accel: Vector3D,
+    pub gyro: Vector3D,
+}

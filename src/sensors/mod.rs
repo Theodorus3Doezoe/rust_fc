@@ -3,13 +3,7 @@ pub mod mpu6500;
 
 use embedded_hal_async::spi::SpiDevice;
 
-use crate::types::Vector3D;
-
-#[derive(Debug, Clone, Copy, defmt::Format)]
-pub struct ImuBurst {
-    pub accel: Vector3D,
-    pub gyro: Vector3D,
-}
+use crate::types::{ImuBurst, Vector3D};
 
 pub trait Imu<SPI: SpiDevice> {
     async fn read_accel(&mut self) -> Result<Vector3D, SPI::Error>;

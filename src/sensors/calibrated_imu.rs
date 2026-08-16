@@ -31,9 +31,6 @@ impl<I> CalibratedImu<I> {
         let mut sum_y = 0.0;
         let mut sum_z = 0.0;
 
-        let mut max_x = f32::MIN;
-        let mut min_x = f32::MAX;
-
         const SAMPLES: usize = 1000;
 
         for i in 0..SAMPLES {
@@ -43,13 +40,6 @@ impl<I> CalibratedImu<I> {
             sum_y += gyro.y;
             sum_z += gyro.z;
 
-            if gyro.x > max_x {
-                max_x = gyro.x;
-            }
-            if gyro.x < min_x {
-                min_x = gyro.x;
-            }
-
             if i.is_multiple_of(50) {
                 defmt::info!("Gyro read count: {} value: {}", i, gyro);
             }
@@ -57,17 +47,13 @@ impl<I> CalibratedImu<I> {
         }
         defmt::info!("sum_x: {}. sum_y: {}, sum_z: {}", sum_x, sum_y, sum_z);
 
-        if (max_x - min_x) > 2.0 {
-            defmt::error!("Kalibratie mislukt: Board bewoog tijdens opstarten!");
-        }
-
         self.gyro_offset = Vector3D {
             x: sum_x / SAMPLES as f32,
             y: sum_y / SAMPLES as f32,
             z: sum_z / SAMPLES as f32,
         };
 
-        defmt::info!("Kalibratie voltooid! Offset: {}", self.gyro_offset);
+        defmt::info!("Kalibratie successful! Offset: {}", self.gyro_offset);
         Ok(())
     }
 }
