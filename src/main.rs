@@ -15,21 +15,12 @@ mod types;
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 
-use crate::{
-    config::{Imu, imu},
-    filters::gyro::GyroFilter,
-};
+use crate::{attitude::attitude_task, rate::rate_task};
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let platform = platform::Platform::init().await;
 
-    spawner.spawn(sensor_task(platform.imu).unwrap());
-
-    loop {
-        Timer::after_secs(1).await;
-    }
+    spawner.spawn(rate_task(platform.imu).unwrap());
+    spawner.spawn(attitude_task().unwrap());
 }
-
-
-
