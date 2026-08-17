@@ -13,14 +13,21 @@ mod sensors;
 mod types;
 
 use embassy_executor::Spawner;
-use embassy_time::Timer;
 
-use crate::{attitude::attitude_task, rate::rate_task};
+use crate::{attitude::attitude_task, rate::rate_task, types::ImuBurst};
+
+use heapless::spsc::Queue;
+use static_cell::StaticCell;
+
+static IMU_QUEUE: StaticCell<Queue<ImuBurst, 16>> = StaticCell::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let platform = platform::Platform::init().await;
 
-    spawner.spawn(rate_task(platform.imu).unwrap());
-    spawner.spawn(attitude_task().unwrap());
+    let queue = IMU_QUEUE.init(Queue::new());
+    let (producer, consumer) = queue.split();
+
+    spawner.spawn(rate_task(platform.imu, producer).unwrap());
+    spawner.spawn(attitude_task(consumer).unwrap());
 }

@@ -1,11 +1,11 @@
 use core::time::Duration as CoreDuration;
 use embassy_time::{Duration, Instant, Ticker};
+use nalgebra::Vector3;
 
 use crate::{
     config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
     filters::vqf,
-    rate::IMU_CHANNEL,
-    types::ImuBurst,
+    types::{ImuBurst, Vector3D},
 };
 struct TempSetpoint {
     roll: f32,
@@ -14,9 +14,11 @@ struct TempSetpoint {
 }
 
 #[embassy_executor::task]
-pub async fn attitude_task() {
-    let dt = CoreDuration::from_micros(1_000_000 / RATE_FREQ_HZ as u64);
+pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBurst>) {
+    let dt = CoreDuration::from_micros(1_000_000 / ATTITUDE_FREQ_HZ as u64);
+    defmt::info!("Attidue dt : {}", dt);
     let mut vqf = vqf::VqfFilter::new(dt);
+    let mut ticker = Ticker::every(Duration::from_hz(ATTITUDE_FREQ_HZ as u64));
 
     let mut error: f32 = 0.0;
     let setpoint = TempSetpoint {
@@ -30,24 +32,52 @@ pub async fn attitude_task() {
     let mut total_duration_nanos: u64 = 0;
 
     loop {
-        let batch = IMU_CHANNEL.receive().await;
+        ticker.next().await;
         let start = Instant::now();
 
-        // for sample in batch {
-        //     vqf.update(sample);
-        // }
-        //
-        let orientation = vqf.update(batch);
+        let mut count = 0u32;
+        let mut sum_gyro = Vector3D::default(); // of Vector3D { x: 0.0, y: 0.0, z: 0.0 }
+        let mut sum_accel = Vector3D::default();
 
-        // let orientation = vqf.orientation();
+        while let Some(sample) = consumer.dequeue() {
+            sum_gyro.x += sample.gyro.x;
+            sum_gyro.y += sample.gyro.y;
+            sum_gyro.z += sample.gyro.z;
+
+            sum_accel.x += sample.accel.x;
+            sum_accel.y += sample.accel.y;
+            sum_accel.z += sample.accel.z;
+
+            count += 1;
+        }
+
+        if count > 0 {
+            let inv = 1.0 / count as f32;
+
+            let avg = ImuBurst {
+                gyro: Vector3D {
+                    x: sum_gyro.x * inv,
+                    y: sum_gyro.y * inv,
+                    z: sum_gyro.z * inv,
+                },
+                accel: Vector3D {
+                    x: sum_accel.x * inv,
+                    y: sum_accel.y * inv,
+                    z: sum_accel.z * inv,
+                },
+            };
+
+            vqf.update(avg);
+        }
 
         total_duration_nanos += start.elapsed().as_nanos();
 
-        let (roll, pitch, yaw) = orientation.euler_angles();
-
-        counter = (counter + 1) % 16000;
+        counter = (counter + 1) % 2000;
 
         if counter == 0 {
+            let orientation = vqf.orientation();
+            let (roll, pitch, yaw) = orientation.euler_angles();
+
             let avg_nanos = total_duration_nanos / 16000;
             let avg_micros = avg_nanos / 1000;
             let avg_micros_fraction = (avg_nanos % 1000) / 100;
