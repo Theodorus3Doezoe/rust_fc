@@ -41,3 +41,9 @@ nalgebra = { version = "*", default-features = false, features = ["libm"] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 static_cell = "2.1.1"
 uf-ahrs = "0.2.1"
+
+[profile.release]
+opt-level = 3
+codegen-units = 1 # Dwingt de compiler om alle modules als één geheel te optimaliseren
+lto = "fat"       # Link-Time Optimization: inlineert ook code uit externe crates (zoals VQF en nalgebra)
+panic = "abort"   # Verwijdert onnodige stack-unwinding code

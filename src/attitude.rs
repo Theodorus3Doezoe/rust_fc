@@ -13,6 +13,19 @@ struct TempSetpoint {
     yaw: f32,
 }
 
+struct AngleController {
+    pub kp: f32,
+    pub max_rate: f32,
+}
+
+impl AngleController {
+    pub fn update(&self, current_angle: f32, target_angle: f32) -> f32 {
+        let error = target_angle + current_angle;
+        let rate_setpoint = self.kp * error;
+        rate_setpoint.clamp(-self.max_rate, self.max_rate)
+    }
+}
+
 #[embassy_executor::task]
 pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBurst>) {
     let dt = CoreDuration::from_micros(1_000_000 / ATTITUDE_FREQ_HZ as u64);
@@ -36,7 +49,7 @@ pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBu
         let start = Instant::now();
 
         let mut count = 0u32;
-        let mut sum_gyro = Vector3D::default(); // of Vector3D { x: 0.0, y: 0.0, z: 0.0 }
+        let mut sum_gyro = Vector3D::default();
         let mut sum_accel = Vector3D::default();
 
         while let Some(sample) = consumer.dequeue() {
@@ -51,24 +64,26 @@ pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBu
             count += 1;
         }
 
-        if count > 0 {
-            let inv = 1.0 / count as f32;
-
-            let avg = ImuBurst {
-                gyro: Vector3D {
-                    x: sum_gyro.x * inv,
-                    y: sum_gyro.y * inv,
-                    z: sum_gyro.z * inv,
-                },
-                accel: Vector3D {
-                    x: sum_accel.x * inv,
-                    y: sum_accel.y * inv,
-                    z: sum_accel.z * inv,
-                },
-            };
-
-            vqf.update(avg);
+        if count == 0 {
+            continue;
         }
+
+        let inv = 1.0 / count as f32;
+
+        let avg = ImuBurst {
+            gyro: Vector3D {
+                x: sum_gyro.x * inv,
+                y: sum_gyro.y * inv,
+                z: sum_gyro.z * inv,
+            },
+            accel: Vector3D {
+                x: sum_accel.x * inv,
+                y: sum_accel.y * inv,
+                z: sum_accel.z * inv,
+            },
+        };
+
+        vqf.update(avg);
 
         total_duration_nanos += start.elapsed().as_nanos();
 
@@ -82,6 +97,8 @@ pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBu
             let avg_micros = avg_nanos / 1000;
             let avg_micros_fraction = (avg_nanos % 1000) / 100;
 
+            let mut rest = vqf.is_rest();
+
             defmt::info!(
                 "ATTITUDE: Average read time: {}.{} µs (Budget: 1000 µs) ",
                 avg_micros,
@@ -94,6 +111,8 @@ pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBu
                 pitch.to_degrees(),
                 yaw.to_degrees()
             );
+
+            defmt::info!("Rest: {}", rest);
 
             total_duration_nanos = 0;
         }
