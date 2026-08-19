@@ -22,6 +22,9 @@ impl Platform {
         let mut imu = imu::Calibrated::new(raw_imu);
         imu.calibrate().await.expect("Imu calibration failed");
 
+        let pwm_channels = board.take_pwm_channels();
+        // add generic servo driver for pwm_channels
+
         Self { board, imu }
     }
 }

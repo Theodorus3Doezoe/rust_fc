@@ -41,6 +41,8 @@ nalgebra = { version = "*", default-features = false, features = ["libm"] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 static_cell = "2.1.1"
 uf-ahrs = "0.2.1"
+embedded-hal = "1.0.0"
+fixed = "1.31.0"
 
 [profile.release]
 opt-level = 3

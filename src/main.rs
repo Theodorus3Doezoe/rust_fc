@@ -8,6 +8,7 @@ mod boards;
 mod config;
 mod controllers;
 mod filters;
+mod mixers;
 mod platform;
 mod rate;
 mod sensors;
