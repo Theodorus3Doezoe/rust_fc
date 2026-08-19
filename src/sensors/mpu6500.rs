@@ -1,4 +1,4 @@
-use super::{Imu, ImuBurst, Vector3D};
+use super::{Imu, ImuBurst, Rates, Vec3};
 use embedded_hal_async::spi::{Operation, SpiDevice};
 
 // Data read start registers & scale factors
@@ -66,7 +66,7 @@ impl<SPI: SpiDevice> Mpu6500<SPI> {
 }
 
 impl<SPI: SpiDevice> Imu<SPI> for Mpu6500<SPI> {
-    async fn read_accel(&mut self) -> Result<Vector3D, SPI::Error> {
+    async fn read_accel(&mut self) -> Result<Vec3, SPI::Error> {
         let mut buf = [0u8; 7];
         buf[0] = ACCEL_START;
 
@@ -76,27 +76,27 @@ impl<SPI: SpiDevice> Imu<SPI> for Mpu6500<SPI> {
         let raw_y = i16::from_be_bytes([buf[3], buf[4]]) as f32;
         let raw_z = i16::from_be_bytes([buf[5], buf[6]]) as f32;
 
-        Ok(Vector3D {
+        Ok(Vec3 {
             x: raw_x * ACCEL_TO_MS2,
             y: raw_y * ACCEL_TO_MS2,
             z: raw_z * ACCEL_TO_MS2,
         })
     }
 
-    async fn read_gyro(&mut self) -> Result<Vector3D, SPI::Error> {
+    async fn read_gyro(&mut self) -> Result<Rates, SPI::Error> {
         let mut buf = [0u8; 7];
         buf[0] = GYRO_START;
 
         self.spi.transfer_in_place(&mut buf).await?;
 
-        let raw_x = i16::from_be_bytes([buf[1], buf[2]]) as f32;
-        let raw_y = i16::from_be_bytes([buf[3], buf[4]]) as f32;
-        let raw_z = i16::from_be_bytes([buf[5], buf[6]]) as f32;
+        let raw_roll = i16::from_be_bytes([buf[1], buf[2]]) as f32;
+        let raw_pitch = i16::from_be_bytes([buf[3], buf[4]]) as f32;
+        let raw_yaw = i16::from_be_bytes([buf[5], buf[6]]) as f32;
 
-        Ok(Vector3D {
-            x: raw_x * GYRO_TO_RAD,
-            y: raw_y * GYRO_TO_RAD,
-            z: raw_z * GYRO_TO_RAD,
+        Ok(Rates {
+            roll: raw_roll * GYRO_TO_RAD,
+            pitch: raw_pitch * GYRO_TO_RAD,
+            yaw: raw_yaw * GYRO_TO_RAD,
         })
     }
 
@@ -112,20 +112,20 @@ impl<SPI: SpiDevice> Imu<SPI> for Mpu6500<SPI> {
 
         // skip temp
 
-        let raw_gx = i16::from_be_bytes([buf[9], buf[10]]) as f32;
-        let raw_gy = i16::from_be_bytes([buf[11], buf[12]]) as f32;
-        let raw_gz = i16::from_be_bytes([buf[13], buf[14]]) as f32;
+        let raw_roll = i16::from_be_bytes([buf[9], buf[10]]) as f32;
+        let raw_pitch = i16::from_be_bytes([buf[11], buf[12]]) as f32;
+        let raw_yaw = i16::from_be_bytes([buf[13], buf[14]]) as f32;
 
         Ok(ImuBurst {
-            accel: Vector3D {
+            accel: Vec3 {
                 x: raw_ax * ACCEL_TO_MS2,
                 y: raw_ay * ACCEL_TO_MS2,
                 z: raw_az * ACCEL_TO_MS2,
             },
-            gyro: Vector3D {
-                x: raw_gx * GYRO_TO_RAD,
-                y: raw_gy * GYRO_TO_RAD,
-                z: raw_gz * GYRO_TO_RAD,
+            gyro: Rates {
+                roll: raw_roll * GYRO_TO_RAD,
+                pitch: raw_pitch * GYRO_TO_RAD,
+                yaw: raw_yaw * GYRO_TO_RAD,
             },
         })
     }

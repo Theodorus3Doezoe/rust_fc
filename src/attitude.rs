@@ -6,8 +6,8 @@ use crate::{
     config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
     controllers::p_controller::AngleController,
     filters::vqf,
-    state::{Axes, SetPointRate},
-    types::{ImuBurst, Vector3D},
+    state::SetPointRate,
+    types::{ImuBurst, Rates, Vec3},
 };
 
 struct TempSetpoint {
@@ -21,21 +21,20 @@ pub async fn attitude_task(
     mut consumer: heapless::spsc::Consumer<'static, ImuBurst>,
     setpoints: &'static SetPointRate,
 ) {
-    const MAX_ANGLE: f32 = f32::to_radians(30.0);
     const MAX_YAW_RATE: f32 = f32::to_radians(180.0);
-    const MAX_TILT_RATE: f32 = f32::to_radians(30.0);
+    const MAX_TILT_RATE: f32 = f32::to_radians(180.0);
 
-    const DT: core::time::Duration =
+    const ATTITUDE_DT: core::time::Duration =
         core::time::Duration::from_micros(1_000_000 / ATTITUDE_FREQ_HZ as u64);
-    defmt::info!("Attitude dt: {} µs", DT.as_micros() as u32);
-    let mut vqf = vqf::VqfFilter::new(DT);
+    defmt::info!("Attitude dt: {} µs", ATTITUDE_DT.as_micros() as u32);
+    let mut vqf = vqf::VqfFilter::new(ATTITUDE_DT);
     let mut ticker = Ticker::every(Duration::from_hz(ATTITUDE_FREQ_HZ as u64));
 
     let roll_kp: f32 = 6.0;
     let pitch_kp: f32 = 6.0;
 
-    let roll_controller = AngleController::new(roll_kp, MAX_ANGLE);
-    let pitch_controller = AngleController::new(pitch_kp, MAX_ANGLE);
+    let roll_controller = AngleController::new(roll_kp, MAX_TILT_RATE);
+    let pitch_controller = AngleController::new(pitch_kp, MAX_TILT_RATE);
 
     // this has to be clamped with max input and normalised to -1.0 and +1.0 from controller input
     let setpoint = TempSetpoint {
@@ -56,17 +55,17 @@ pub async fn attitude_task(
         // let start = Instant::now();
 
         let mut count = 0u32;
-        let mut sum_gyro = Vector3D::default();
-        let mut sum_accel = Vector3D::default();
+        let mut sum_gyro = Rates::default();
+        let mut sum_accel = Vec3::default();
 
         while let Some(sample) = consumer.dequeue() {
-            sum_gyro.x += sample.gyro.x;
-            sum_gyro.y += sample.gyro.y;
-            sum_gyro.z += sample.gyro.z;
-
             sum_accel.x += sample.accel.x;
             sum_accel.y += sample.accel.y;
             sum_accel.z += sample.accel.z;
+
+            sum_gyro.roll += sample.gyro.roll;
+            sum_gyro.pitch += sample.gyro.pitch;
+            sum_gyro.yaw += sample.gyro.yaw;
 
             count += 1;
         }
@@ -78,15 +77,15 @@ pub async fn attitude_task(
         let inv = 1.0 / count as f32;
 
         let avg = ImuBurst {
-            gyro: Vector3D {
-                x: sum_gyro.x * inv,
-                y: sum_gyro.y * inv,
-                z: sum_gyro.z * inv,
-            },
-            accel: Vector3D {
+            accel: Vec3 {
                 x: sum_accel.x * inv,
                 y: sum_accel.y * inv,
                 z: sum_accel.z * inv,
+            },
+            gyro: Rates {
+                roll: sum_gyro.roll * inv,
+                pitch: sum_gyro.pitch * inv,
+                yaw: sum_gyro.yaw * inv,
             },
         };
 
@@ -94,13 +93,13 @@ pub async fn attitude_task(
 
         let (roll, pitch, yaw) = orientation.euler_angles();
 
-        let rates = Axes {
+        let set_rates = crate::types::Rates {
             roll: roll_controller.update(setpoint.roll, roll),
             pitch: pitch_controller.update(setpoint.pitch, pitch),
             yaw: setpoint.yaw * MAX_YAW_RATE,
         };
 
-        setpoints.set(rates);
+        setpoints.set(set_rates);
 
         // total_duration_nanos += start.elapsed().as_nanos();
 
@@ -124,9 +123,9 @@ pub async fn attitude_task(
                 roll.to_degrees(),
                 pitch.to_degrees(),
                 yaw.to_degrees(),
-                rates.roll.to_degrees(),
-                rates.pitch.to_degrees(),
-                rates.yaw.to_degrees(),
+                set_rates.roll.to_degrees(),
+                set_rates.pitch.to_degrees(),
+                set_rates.yaw.to_degrees(),
                 rest
             );
 

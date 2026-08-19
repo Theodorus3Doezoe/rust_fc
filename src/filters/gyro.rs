@@ -1,11 +1,11 @@
 use biquad::*;
 
-use crate::types::Vector3D;
+use crate::types::Rates;
 
 pub struct GyroFilter {
-    x: DirectForm2Transposed<f32>,
-    y: DirectForm2Transposed<f32>,
-    z: DirectForm2Transposed<f32>,
+    roll: DirectForm2Transposed<f32>,
+    pitch: DirectForm2Transposed<f32>,
+    yaw: DirectForm2Transposed<f32>,
 }
 
 impl GyroFilter {
@@ -19,17 +19,17 @@ impl GyroFilter {
         .unwrap();
 
         Self {
-            x: DirectForm2Transposed::<f32>::new(coeffs),
-            y: DirectForm2Transposed::<f32>::new(coeffs),
-            z: DirectForm2Transposed::<f32>::new(coeffs),
+            roll: DirectForm2Transposed::<f32>::new(coeffs),
+            pitch: DirectForm2Transposed::<f32>::new(coeffs),
+            yaw: DirectForm2Transposed::<f32>::new(coeffs),
         }
     }
 
-    pub fn apply(&mut self, gyro: Vector3D) -> Vector3D {
-        Vector3D {
-            x: self.x.run(gyro.x),
-            y: self.y.run(gyro.y),
-            z: self.z.run(gyro.z),
+    pub fn apply(&mut self, gyro: Rates) -> Rates {
+        Rates {
+            roll: self.roll.run(gyro.roll),
+            pitch: self.pitch.run(gyro.pitch),
+            yaw: self.yaw.run(gyro.yaw),
         }
     }
 }

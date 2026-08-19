@@ -20,7 +20,7 @@ impl VqfFilter {
     }
 
     pub fn update(&mut self, data: ImuBurst) -> nalgebra::UnitQuaternion<f32> {
-        let gyro = Vector3::new(data.gyro.x, data.gyro.y, data.gyro.z);
+        let gyro = Vector3::new(data.gyro.roll, data.gyro.pitch, data.gyro.yaw);
         let accel = Vector3::new(data.accel.x, data.accel.y, data.accel.z);
 
         self.vqf.update2(gyro, accel);

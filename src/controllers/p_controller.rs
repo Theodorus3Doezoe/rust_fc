@@ -9,7 +9,8 @@ impl AngleController {
     }
     pub fn update(&self, target_angle: f32, current_angle: f32) -> f32 {
         let error = target_angle - current_angle;
-        self.kp * error.clamp(-self.max_rate, self.max_rate)
+        let commanded_rate = self.kp * error;
+        commanded_rate.clamp(-self.max_rate, self.max_rate)
     }
 
     pub fn set_kp(&mut self, kp: f32) {
