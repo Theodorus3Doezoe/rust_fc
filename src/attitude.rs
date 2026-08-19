@@ -1,39 +1,43 @@
-use core::time::Duration as CoreDuration;
+use core::{sync::atomic::Ordering, time::Duration as CoreDuration};
 use embassy_time::{Duration, Instant, Ticker};
 use nalgebra::Vector3;
 
 use crate::{
     config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
+    controllers::p_controller::AngleController,
     filters::vqf,
+    state::{Axes, SetPointRate},
     types::{ImuBurst, Vector3D},
 };
+
 struct TempSetpoint {
     roll: f32,
     pitch: f32,
     yaw: f32,
 }
 
-struct AngleController {
-    pub kp: f32,
-    pub max_rate: f32,
-}
-
-impl AngleController {
-    pub fn update(&self, current_angle: f32, target_angle: f32) -> f32 {
-        let error = target_angle + current_angle;
-        let rate_setpoint = self.kp * error;
-        rate_setpoint.clamp(-self.max_rate, self.max_rate)
-    }
-}
-
 #[embassy_executor::task]
-pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBurst>) {
-    let dt = CoreDuration::from_micros(1_000_000 / ATTITUDE_FREQ_HZ as u64);
-    defmt::info!("Attidue dt : {}", dt);
-    let mut vqf = vqf::VqfFilter::new(dt);
+pub async fn attitude_task(
+    mut consumer: heapless::spsc::Consumer<'static, ImuBurst>,
+    setpoints: &'static SetPointRate,
+) {
+    const MAX_ANGLE: f32 = f32::to_radians(30.0);
+    const MAX_YAW_RATE: f32 = f32::to_radians(180.0);
+    const MAX_TILT_RATE: f32 = f32::to_radians(30.0);
+
+    const DT: core::time::Duration =
+        core::time::Duration::from_micros(1_000_000 / ATTITUDE_FREQ_HZ as u64);
+    defmt::info!("Attitude dt: {} µs", DT.as_micros() as u32);
+    let mut vqf = vqf::VqfFilter::new(DT);
     let mut ticker = Ticker::every(Duration::from_hz(ATTITUDE_FREQ_HZ as u64));
 
-    let mut error: f32 = 0.0;
+    let roll_kp: f32 = 6.0;
+    let pitch_kp: f32 = 6.0;
+
+    let roll_controller = AngleController::new(roll_kp, MAX_ANGLE);
+    let pitch_controller = AngleController::new(pitch_kp, MAX_ANGLE);
+
+    // this has to be clamped with max input and normalised to -1.0 and +1.0 from controller input
     let setpoint = TempSetpoint {
         roll: 0.0,
         pitch: 0.0,
@@ -44,9 +48,12 @@ pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBu
 
     let mut total_duration_nanos: u64 = 0;
 
+    let times_a_sec = 2;
+    let print_after_ticks = ATTITUDE_FREQ_HZ / times_a_sec;
+
     loop {
         ticker.next().await;
-        let start = Instant::now();
+        // let start = Instant::now();
 
         let mut count = 0u32;
         let mut sum_gyro = Vector3D::default();
@@ -83,38 +90,47 @@ pub async fn attitude_task(mut consumer: heapless::spsc::Consumer<'static, ImuBu
             },
         };
 
-        vqf.update(avg);
+        let orientation = vqf.update(avg);
 
-        total_duration_nanos += start.elapsed().as_nanos();
+        let (roll, pitch, yaw) = orientation.euler_angles();
 
-        counter = (counter + 1) % 2000;
+        let rates = Axes {
+            roll: roll_controller.update(setpoint.roll, roll),
+            pitch: pitch_controller.update(setpoint.pitch, pitch),
+            yaw: setpoint.yaw * MAX_YAW_RATE,
+        };
 
-        if counter == 0 {
-            let orientation = vqf.orientation();
-            let (roll, pitch, yaw) = orientation.euler_angles();
+        setpoints.set(rates);
 
-            let avg_nanos = total_duration_nanos / 16000;
-            let avg_micros = avg_nanos / 1000;
-            let avg_micros_fraction = (avg_nanos % 1000) / 100;
+        // total_duration_nanos += start.elapsed().as_nanos();
 
-            let mut rest = vqf.is_rest();
+        counter += 1;
+        if counter >= print_after_ticks {
+            counter = 0;
+            // let avg_nanos = total_duration_nanos / 2000;
+            // let avg_micros = avg_nanos / 1000;
+            // let avg_micros_fraction = (avg_nanos % 1000) / 100;
+
+            let rest = vqf.is_rest();
+            //
+            // defmt::info!(
+            //     "ATTITUDE: Average read time: {}.{} µs (Budget: 1000 µs) ",
+            //     avg_micros,
+            //     avg_micros_fraction,
+            // );
 
             defmt::info!(
-                "ATTITUDE: Average read time: {}.{} µs (Budget: 1000 µs) ",
-                avg_micros,
-                avg_micros_fraction,
-            );
-
-            defmt::info!(
-                "Roll: {}°, Pitch: {}°, Yaw: {}°",
+                "Att: [R: {}°, P: {}°, Y: {}°] | RateCmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
                 roll.to_degrees(),
                 pitch.to_degrees(),
-                yaw.to_degrees()
+                yaw.to_degrees(),
+                rates.roll.to_degrees(),
+                rates.pitch.to_degrees(),
+                rates.yaw.to_degrees(),
+                rest
             );
 
-            defmt::info!("Rest: {}", rest);
-
-            total_duration_nanos = 0;
+            // total_duration_nanos = 0;
         }
     }
 }
