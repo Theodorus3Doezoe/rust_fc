@@ -1,3 +1,5 @@
+use crate::config::Imu;
+
 use super::{Board, PwmChannels};
 
 use embassy_rp::bind_interrupts;
@@ -14,19 +16,18 @@ bind_interrupts!(struct Irqs {
                  dma::InterruptHandler<DMA_CH1>;
 });
 
+// Type aliases
+type PwmPinConcrete = PwmOutput<'static>;
+type ImuConcrete = ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, NoDelay>;
+
 pub struct Rp2350Dev {
-    imu_spi: Option<ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, NoDelay>>,
-    pwm_channels: Option<
-        PwmChannels<PwmOutput<'static>, PwmOutput<'static>, PwmOutput<'static>, PwmOutput<'static>>,
-    >,
+    imu_spi: Option<ImuConcrete>,
+    pwm_channels: Option<PwmChannels<PwmPinConcrete>>,
 }
 
 impl Board for Rp2350Dev {
-    type ImuSpi = ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, NoDelay>;
-    type Pwm1 = PwmOutput<'static>;
-    type Pwm2 = PwmOutput<'static>;
-    type Pwm3 = PwmOutput<'static>;
-    type Pwm4 = PwmOutput<'static>;
+    type ImuSpi = ImuConcrete;
+    type PwmPin = PwmPinConcrete;
 
     fn init() -> Self {
         let p = embassy_rp::init(Default::default());
@@ -73,7 +74,7 @@ impl Board for Rp2350Dev {
         self.imu_spi.take().unwrap()
     }
 
-    fn take_pwm_channels(&mut self) -> PwmChannels<Self::Pwm1, Self::Pwm2, Self::Pwm3, Self::Pwm4> {
+    fn take_pwm_channels(&mut self) -> PwmChannels<Self::PwmPin> {
         self.pwm_channels.take().unwrap()
     }
 }

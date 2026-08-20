@@ -3,6 +3,7 @@ pub use crate::sensors::Imu;
 
 pub type BoardType = crate::boards::rp2350dev::Rp2350Dev;
 pub type SelectedImuDriver<SPI> = crate::sensors::mpu6500::Mpu6500<SPI>;
+// pub type ActiveFrame = _; // bicopter frame
 
 pub mod imu {
     use super::*;

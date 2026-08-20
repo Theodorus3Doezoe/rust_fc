@@ -3,11 +3,13 @@
 use defmt_rtt as _;
 use panic_probe as _;
 
+mod actuators;
 mod attitude;
 mod boards;
 mod config;
 mod controllers;
 mod filters;
+mod frames;
 mod mixers;
 mod platform;
 mod rate;

@@ -15,3 +15,10 @@ pub struct ImuBurst {
     pub accel: Vec3,
     pub gyro: Rates,
 }
+
+pub struct PwmChannels<P> {
+    pub pwm1: P,
+    pub pwm2: P,
+    pub pwm3: P,
+    pub pwm4: P,
+}
