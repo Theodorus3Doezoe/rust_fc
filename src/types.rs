@@ -22,11 +22,3 @@ pub struct PwmChannels<P> {
     pub pwm3: P,
     pub pwm4: P,
 }
-
-#[derive(Clone, Copy, defmt::Format)]
-pub struct ActuatorOutput {
-    pub servo_left_us: u16,
-    pub servo_right_us: u16,
-    pub motor_left: f32, // of u16 als je DShot waarden hebt
-    pub motor_right: f32,
-}

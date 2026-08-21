@@ -8,7 +8,7 @@ use crate::{
     config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
     filters::gyro::GyroFilter,
-    state::SetPointRate,
+    sync::{AtomicRates, ImuProducer},
     types::{ImuBurst, Rates},
 };
 
@@ -16,8 +16,8 @@ use crate::{
 pub async fn rate_task(
     mut imu: imu::Calibrated,
     mut frame: frame::Concrete,
-    mut producer: heapless::spsc::Producer<'static, ImuBurst>,
-    setpoints: &'static SetPointRate,
+    mut producer: ImuProducer,
+    setpoints: &'static AtomicRates,
 ) {
     let mut ticker = Ticker::every(Duration::from_hz(RATE_FREQ_HZ as u64));
     let mut gyro_filter = GyroFilter::new(RATE_FREQ_HZ as f32, GYRO_FILTER_CUTOFF_HZ);
@@ -99,7 +99,7 @@ pub async fn rate_task(
             );
 
             defmt::info!(
-                "[ACT          ] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
+                "[ACT] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
                 frame_out.mixer.servo_left,
                 frame_out.mixer.servo_right,
                 frame_out.actuators.servo_left_us,

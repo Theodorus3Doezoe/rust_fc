@@ -6,7 +6,7 @@ use crate::{
     config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
     controllers::p_controller::AngleController,
     filters::vqf,
-    state::SetPointRate,
+    sync::{AtomicRates, ImuConsumer},
     types::{ImuBurst, Rates, Vec3},
 };
 
@@ -17,10 +17,7 @@ struct TempSetpoint {
 }
 
 #[embassy_executor::task]
-pub async fn attitude_task(
-    mut consumer: heapless::spsc::Consumer<'static, ImuBurst>,
-    setpoints: &'static SetPointRate,
-) {
+pub async fn attitude_task(mut consumer: ImuConsumer, setpoints: &'static AtomicRates) {
     const MAX_YAW_RATE: f32 = f32::to_radians(180.0);
     const MAX_TILT_RATE: f32 = f32::to_radians(180.0);
 
