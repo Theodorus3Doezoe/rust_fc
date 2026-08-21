@@ -568,6 +568,7 @@ name = "embassy-rp-test"
 version = "0.1.0"
 dependencies = [
  "biquad",
+ "bitflags 2.13.1",
  "cortex-m-rt",
  "defmt",
  "defmt-rtt",
