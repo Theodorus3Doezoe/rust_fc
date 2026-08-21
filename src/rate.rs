@@ -5,7 +5,7 @@ use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Ticker};
 
 use crate::{
-    config::{GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, imu},
+    config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
     filters::gyro::GyroFilter,
     state::SetPointRate,
@@ -15,6 +15,7 @@ use crate::{
 #[embassy_executor::task]
 pub async fn rate_task(
     mut imu: imu::Calibrated,
+    mut frame: frame::Concrete,
     mut producer: heapless::spsc::Producer<'static, ImuBurst>,
     setpoints: &'static SetPointRate,
 ) {
@@ -71,11 +72,13 @@ pub async fn rate_task(
         let mut burst = imu.read_burst().await.unwrap();
         burst.gyro = gyro_filter.apply(burst.gyro);
 
-        producer.enqueue(burst);
+        let _ = producer.enqueue(burst);
 
         let setpoints = setpoints.get();
 
         let pid_outputs = rate_pids.update(setpoints, burst.gyro, RATE_DT);
+
+        let _ = frame.apply(0.0, pid_outputs);
         total_duration_nanos += start.elapsed().as_nanos();
 
         counter += 1;

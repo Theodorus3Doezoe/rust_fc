@@ -1,5 +1,3 @@
-use crate::config::Imu;
-
 use super::{Board, PwmChannels};
 
 use embassy_rp::bind_interrupts;

@@ -1,9 +1,10 @@
-pub use crate::boards::Board;
-pub use crate::sensors::Imu;
+pub use crate::boards::{Board, rp2350dev::Rp2350Dev};
+pub use crate::frames::{Frame, v_copter::VCopterFrame};
+pub use crate::sensors::{Imu, mpu6500::Mpu6500};
 
-pub type BoardType = crate::boards::rp2350dev::Rp2350Dev;
-pub type SelectedImuDriver<SPI> = crate::sensors::mpu6500::Mpu6500<SPI>;
-// pub type ActiveFrame = _; // bicopter frame
+pub type BoardType = Rp2350Dev;
+pub type SelectedImuDriver<SPI> = Mpu6500<SPI>;
+pub type ActiveFrame<P> = VCopterFrame<P>;
 
 pub mod imu {
     use super::*;
@@ -15,6 +16,13 @@ pub mod imu {
     pub type Spi = <BoardType as Board>::ImuSpi;
     pub type Raw = SelectedImuDriver<Spi>;
     pub type Calibrated = CalibratedImu<Raw>;
+}
+
+pub mod frame {
+    use super::*;
+
+    pub type Pwm = <BoardType as Board>::PwmPin;
+    pub type Concrete = ActiveFrame<Pwm>;
 }
 
 pub const RATE_FREQ_HZ: u16 = 8_000;

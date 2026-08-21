@@ -1,9 +1,11 @@
-use crate::config::{Board, BoardType, imu};
+// use crate::config::{Board, BoardType, frame, imu};
+use crate::config::{Board, BoardType, Frame, Imu, frame, imu};
 // use crate::config::{Board, BoardType, ConcreteImu, RawImu};
 
 pub struct Platform {
     pub board: BoardType,
     pub imu: imu::Calibrated,
+    pub frame: frame::Concrete,
 }
 
 impl Platform {
@@ -23,9 +25,10 @@ impl Platform {
         imu.calibrate().await.expect("Imu calibration failed");
 
         let pwm_channels = board.take_pwm_channels(); // todo
+        let frame = frame::Concrete::init(pwm_channels);
         // make the channels more seperated and dynamic
         // add generic servo driver for pwm_channels
 
-        Self { board, imu }
+        Self { board, imu, frame }
     }
 }

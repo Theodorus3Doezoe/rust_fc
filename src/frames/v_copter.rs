@@ -18,17 +18,18 @@ where
     type PwmPin = P;
     type Mixer = self::BiCopMixer;
 
-    fn init(mixer: self::BiCopMixer, pwm: PwmChannels<P>) -> Self {
+    fn init(pwm: PwmChannels<P>) -> Self {
         Self {
             servo_left: ServoController::new(pwm.pwm1, 0.0, false),
             servo_right: ServoController::new(pwm.pwm2, 0.0, false),
-            mixer,
+            // temp hard coded
+            mixer: bi_copter::BiCopMixer::init(5.0, 0.0, 0.0),
         }
     }
 
-    fn apply(&mut self, throttle: f32, pid: Rates, is_armed: bool) {
+    fn apply(&mut self, throttle: f32, pid: Rates) {
         // use inner.mixer
-        let output: BicopterOutput = self.mixer.mix(throttle, pid, is_armed);
+        let output: BicopterOutput = self.mixer.mix(throttle, pid);
 
         self.servo_left.set_duty(output.servo_left);
         self.servo_right.set_duty(output.servo_right);

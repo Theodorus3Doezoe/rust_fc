@@ -34,6 +34,6 @@ async fn main(spawner: Spawner) {
     let queue = IMU_QUEUE.init(Queue::new());
     let (producer, consumer) = queue.split();
 
-    spawner.spawn(rate_task(platform.imu, producer, &RATE_SETPOINTS).unwrap());
+    spawner.spawn(rate_task(platform.imu, platform.frame, producer, &RATE_SETPOINTS).unwrap());
     spawner.spawn(attitude_task(consumer, &RATE_SETPOINTS).unwrap());
 }
