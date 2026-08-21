@@ -53,7 +53,7 @@ impl<I> CalibratedImu<I> {
             z: sum_z / SAMPLES as f32,
         };
 
-        defmt::info!("Kalibratie successful! Offset: {}", self.gyro_offset);
+        defmt::info!("Calibration sucessfull: {}", self.gyro_offset);
         Ok(())
     }
 }
@@ -64,7 +64,12 @@ where
     SPI: SpiDevice,
 {
     async fn read_accel(&mut self) -> Result<Vec3, SPI::Error> {
-        self.inner_imu.read_accel().await
+        let accel = self.inner_imu.read_accel().await?;
+        Ok(Vec3 {
+            x: accel.x,
+            y: accel.y,
+            z: accel.z,
+        })
     }
 
     async fn read_gyro(&mut self) -> Result<Rates, SPI::Error> {
@@ -78,7 +83,6 @@ where
 
     async fn read_burst(&mut self) -> Result<ImuBurst, SPI::Error> {
         let mut burst = self.inner_imu.read_burst().await?;
-        // Trek automatisch de offset af van de gyro
         burst.gyro.roll -= self.gyro_offset.x;
         burst.gyro.pitch -= self.gyro_offset.y;
         burst.gyro.yaw -= self.gyro_offset.z;

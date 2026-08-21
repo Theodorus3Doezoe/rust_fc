@@ -2,8 +2,10 @@ use bitflags::bitflags;
 use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
 use defmt::info;
 
+pub static SYSTEM: SystemState = SystemState::new();
+
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, )]
     pub struct ArmBlockFlags: u16 {
         const THROTTLE_NOT_ZERO = 1 << 0;
         const TOO_TILTED        = 1 << 1;
@@ -14,6 +16,7 @@ bitflags! {
 
 }
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct SystemErrorFlags: u16 {
         const RX_LOST = 1 << 0;
         const BAT_CRITICAL = 1 << 1;
@@ -23,7 +26,7 @@ bitflags! {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, defmt::Format)]
 pub enum State {
     Init = 0,
     Disarmed = 1,
@@ -32,7 +35,7 @@ pub enum State {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, defmt::Format)]
 pub enum FailsafeAction {
     None = 0,
     Land = 1,

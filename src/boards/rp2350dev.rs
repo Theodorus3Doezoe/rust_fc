@@ -1,17 +1,20 @@
 use super::{Board, PwmChannels};
 
 use embassy_rp::bind_interrupts;
-use embassy_rp::dma;
+use embassy_rp::dma::InterruptHandler as DmaInterruptHandler;
 use embassy_rp::gpio::{Level, Output};
+use embassy_rp::peripherals::USB;
 use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, SPI0};
 use embassy_rp::pwm::{Config as PwmConf, Pwm, PwmOutput};
 use embassy_rp::spi::{Async, Config as SpiConfig, Spi};
+use embassy_rp::usb::{Driver as RpUsbDriver, InterruptHandler as UsbInterruptHandler};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use fixed::traits::ToFixed;
 
 bind_interrupts!(struct Irqs {
-    DMA_IRQ_0 => dma::InterruptHandler<DMA_CH0>,
-                 dma::InterruptHandler<DMA_CH1>;
+    DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>,
+                 DmaInterruptHandler<DMA_CH1>;
+    USBCTRL_IRQ => UsbInterruptHandler<USB>;
 });
 
 // Type aliases
@@ -21,11 +24,13 @@ type ImuConcrete = ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, N
 pub struct Rp2350Dev {
     imu_spi: Option<ImuConcrete>,
     pwm_channels: Option<PwmChannels<PwmPinConcrete>>,
+    usb_driver: Option<RpUsbDriver<'static, USB>>,
 }
 
 impl Board for Rp2350Dev {
     type ImuSpi = ImuConcrete;
     type PwmPin = PwmPinConcrete;
+    type UsbDriver = RpUsbDriver<'static, USB>;
 
     fn init() -> Self {
         let p = embassy_rp::init(Default::default());
@@ -57,6 +62,8 @@ impl Board for Rp2350Dev {
             panic!("Cant split PWM slice 2");
         };
 
+        let usb_driver = RpUsbDriver::new(p.USB, Irqs);
+
         Self {
             imu_spi: Some(imu_spi_device),
             pwm_channels: Some(PwmChannels {
@@ -65,6 +72,7 @@ impl Board for Rp2350Dev {
                 pwm3: pwm_3,
                 pwm4: pwm_4,
             }),
+            usb_driver: Some(usb_driver),
         }
     }
 
@@ -74,5 +82,9 @@ impl Board for Rp2350Dev {
 
     fn take_pwm_channels(&mut self) -> PwmChannels<Self::PwmPin> {
         self.pwm_channels.take().unwrap()
+    }
+
+    fn take_usb_driver(&mut self) -> Self::UsbDriver {
+        self.usb_driver.take().unwrap()
     }
 }

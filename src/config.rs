@@ -25,6 +25,21 @@ pub mod frame {
     pub type Concrete = ActiveFrame<Pwm>;
 }
 
+pub mod usb {
+    use super::*;
+    use embassy_usb::UsbDevice;
+    use embassy_usb::class::cdc_acm::CdcAcmClass;
+
+    pub type Driver = <BoardType as Board>::UsbDriver;
+    pub type Device = UsbDevice<'static, Driver>;
+    pub type SerialClass = CdcAcmClass<'static, Driver>;
+
+    pub struct Handles {
+        pub dev: Device,
+        pub serial: SerialClass,
+    }
+}
+
 pub const RATE_FREQ_HZ: u16 = 8_000;
 pub const GYRO_FILTER_CUTOFF_HZ: f32 = 80.0;
 

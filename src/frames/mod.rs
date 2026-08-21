@@ -13,4 +13,5 @@ pub trait Frame {
 
     fn init(channels: PwmChannels<Self::PwmPin>) -> Self;
     fn apply(&mut self, throttle: f32, pid: Rates) -> FrameOutput;
+    fn stop_all(&mut self);
 }

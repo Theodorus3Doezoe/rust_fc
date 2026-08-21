@@ -6,6 +6,7 @@ use crate::{
     config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
     controllers::p_controller::AngleController,
     filters::vqf,
+    state::{ArmBlockFlags, SYSTEM},
     sync::{AtomicRates, ImuConsumer},
     types::{ImuBurst, Rates, Vec3},
 };
@@ -89,6 +90,16 @@ pub async fn attitude_task(mut consumer: ImuConsumer, setpoints: &'static Atomic
         let orientation = vqf.update(avg);
 
         let (roll, pitch, yaw) = orientation.euler_angles();
+
+        // remove magic numbers
+        if !SYSTEM.is_armed() {
+            let max_tilt_rad = 25.0_f32.to_radians();
+            if roll.abs() > max_tilt_rad || pitch.abs() > max_tilt_rad {
+                SYSTEM.add_arm_error(ArmBlockFlags::TOO_TILTED);
+            } else {
+                SYSTEM.clear_arm_error(ArmBlockFlags::TOO_TILTED);
+            }
+        }
 
         let set_rates = crate::types::Rates {
             roll: roll_controller.update(setpoint.roll, roll),

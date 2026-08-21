@@ -58,4 +58,11 @@ where
             },
         }
     }
+
+    fn stop_all(&mut self) {
+        let _ = self.servo_left.set_duty(0.0);
+        let _ = self.servo_right.set_duty(0.0);
+
+        // disable motors to 0%
+    }
 }

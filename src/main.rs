@@ -17,14 +17,16 @@ mod sensors;
 mod state;
 mod sync;
 mod types;
+mod usb;
 
 use embassy_executor::Spawner;
 
 use crate::{
     attitude::attitude_task,
     rate::rate_task,
+    state::{SYSTEM, State},
     sync::{AtomicRates, ImuQueue},
-    types::ImuBurst,
+    usb::{usb_serial_task, usb_task},
 };
 
 use heapless::spsc::Queue;
@@ -43,4 +45,9 @@ async fn main(spawner: Spawner) {
     // spawner.spawn(rate_task(platform.imu, platform.frame, producer, &RATE_SETPOINTS).unwrap());
     spawner.spawn(rate_task(platform.imu, platform.frame, producer, &RATE_SETPOINTS).unwrap());
     spawner.spawn(attitude_task(consumer, &RATE_SETPOINTS).unwrap());
+
+    spawner.spawn(usb_task(platform.usb.dev).unwrap());
+    spawner.spawn(usb_serial_task(platform.usb.serial).unwrap());
+
+    SYSTEM.set_state(State::Disarmed);
 }

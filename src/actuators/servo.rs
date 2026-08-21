@@ -30,11 +30,12 @@ where
 
         let mut pulse_us = 1500.0 + (mixer_input * 500.0) + self.offset;
         pulse_us = pulse_us.clamp(1000.0, 2000.0);
+        let pulse_u16 = (pulse_us + 0.5) as u16;
 
         let _ = self
             .pwm_channel
             .set_duty_cycle_fraction(pulse_us as u16, self.period_us as u16);
 
-        pulse_us as u16
+        pulse_u16
     }
 }

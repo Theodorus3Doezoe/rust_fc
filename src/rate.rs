@@ -8,6 +8,8 @@ use crate::{
     config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
     filters::gyro::GyroFilter,
+    frames::v_copter::FrameOutput,
+    state::{FailsafeAction, SYSTEM, State, SystemErrorFlags},
     sync::{AtomicRates, ImuProducer},
     types::{ImuBurst, Rates},
 };
@@ -69,16 +71,51 @@ pub async fn rate_task(
 
         let start = Instant::now();
 
-        let mut burst = imu.read_burst().await.unwrap();
-        burst.gyro = gyro_filter.apply(burst.gyro);
+        let burst = match imu.read_burst().await {
+            Ok(b) => {
+                SYSTEM.clear_system_error(SystemErrorFlags::IMU_FAILURE);
+                b
+            }
+            Err(e) => {
+                defmt::warn!("IMU error: {:?}", defmt::Debug2Format(&e));
+                SYSTEM.add_system_error(SystemErrorFlags::IMU_FAILURE);
+                SYSTEM.set_state(State::Failsafe);
+                return;
+            }
+        };
+
+        let filtered_gyro = gyro_filter.apply(burst.gyro);
 
         let _ = producer.enqueue(burst);
 
-        let setpoints = setpoints.get();
+        let mut telemetry: Option<(Rates, Rates, FrameOutput)> = None;
 
-        let pid_outputs = rate_pids.update(setpoints, burst.gyro, RATE_DT);
+        match SYSTEM.get_state() {
+            State::Armed => {
+                let sp = setpoints.get();
 
-        let frame_out = frame.apply(0.0, pid_outputs);
+                let pid = rate_pids.update(sp, burst.gyro, RATE_DT);
+
+                let out = frame.apply(0.0, pid);
+
+                telemetry = Some((sp, pid, out));
+            }
+            State::Disarmed | State::Init => {
+                rate_pids.reset();
+                // frame.stop_all();
+            }
+            State::Failsafe => {
+                rate_pids.reset();
+                match SYSTEM.get_failsafe() {
+                    FailsafeAction::None => frame.stop_all(),
+                    FailsafeAction::Land => {
+                        frame.stop_all();
+                        // land procedure
+                    }
+                }
+            }
+        }
+
         total_duration_nanos += start.elapsed().as_nanos();
 
         counter += 1;
@@ -89,22 +126,34 @@ pub async fn rate_task(
             let avg_frac = (avg_nanos % 1000) / 100;
             total_duration_nanos = 0;
 
-            defmt::info!(
-                "[RATE {}.{}µs] Burst: {} | Set: {} | PID: {}",
-                avg_us,
-                avg_frac,
-                burst,
-                setpoints,
-                pid_outputs
-            );
-
-            defmt::info!(
-                "[ACT] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
-                frame_out.mixer.servo_left,
-                frame_out.mixer.servo_right,
-                frame_out.actuators.servo_left_us,
-                frame_out.actuators.servo_right_us
-            );
+            match telemetry {
+                Some((sp, pid, out)) => {
+                    defmt::info!(
+                        "[RATE {}.{}µs] [ARMED] Burst: {:?} | Set: {:?} | PID: {:?}",
+                        avg_us,
+                        avg_frac,
+                        burst,
+                        sp,
+                        pid
+                    );
+                    defmt::info!(
+                        "[ACT] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
+                        out.mixer.servo_left,
+                        out.mixer.servo_right,
+                        out.actuators.servo_left_us,
+                        out.actuators.servo_right_us
+                    );
+                }
+                None => {
+                    defmt::info!(
+                        "[RATE {}.{}µs] [STATE: {:?}] ArmBlocks: {:?}",
+                        avg_us,
+                        avg_frac,
+                        SYSTEM.get_state(),
+                        defmt::Debug2Format(&SYSTEM.get_arm_errors())
+                    );
+                }
+            }
         }
     }
 }
