@@ -16,7 +16,7 @@ pub struct BicopterOutput {
 impl BiCopMixer {
     pub const fn init(idle_throttle: f32, servo_left_offset: f32, servo_right_offset: f32) -> Self {
         Self {
-            idle_throttle,
+            idle_throttle: idle_throttle / 100.0,
             servo_left_offset,
             servo_right_offset,
         }

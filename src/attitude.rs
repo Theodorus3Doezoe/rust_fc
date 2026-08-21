@@ -52,7 +52,7 @@ pub async fn attitude_task(
 
     loop {
         ticker.next().await;
-        // let start = Instant::now();
+        let start = Instant::now();
 
         let mut count = 0u32;
         let mut sum_gyro = Rates::default();
@@ -101,25 +101,22 @@ pub async fn attitude_task(
 
         setpoints.set(set_rates);
 
-        // total_duration_nanos += start.elapsed().as_nanos();
+        total_duration_nanos += start.elapsed().as_nanos();
 
         counter += 1;
         if counter >= print_after_ticks {
             counter = 0;
-            // let avg_nanos = total_duration_nanos / 2000;
-            // let avg_micros = avg_nanos / 1000;
-            // let avg_micros_fraction = (avg_nanos % 1000) / 100;
+            let avg_nanos = total_duration_nanos / print_after_ticks as u64;
+            let avg_us = avg_nanos / 1000;
+            let avg_frac = (avg_nanos % 1000) / 100;
+            total_duration_nanos = 0;
 
             let rest = vqf.is_rest();
-            //
-            // defmt::info!(
-            //     "ATTITUDE: Average read time: {}.{} µs (Budget: 1000 µs) ",
-            //     avg_micros,
-            //     avg_micros_fraction,
-            // );
 
             defmt::info!(
-                "Att: [R: {}°, P: {}°, Y: {}°] | RateCmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
+                "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
+                avg_us,
+                avg_frac,
                 roll.to_degrees(),
                 pitch.to_degrees(),
                 yaw.to_degrees(),
@@ -128,8 +125,6 @@ pub async fn attitude_task(
                 set_rates.yaw.to_degrees(),
                 rest
             );
-
-            // total_duration_nanos = 0;
         }
     }
 }

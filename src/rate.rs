@@ -78,26 +78,33 @@ pub async fn rate_task(
 
         let pid_outputs = rate_pids.update(setpoints, burst.gyro, RATE_DT);
 
-        let _ = frame.apply(0.0, pid_outputs);
+        let frame_out = frame.apply(0.0, pid_outputs);
         total_duration_nanos += start.elapsed().as_nanos();
 
         counter += 1;
         if counter >= print_after_ticks {
             counter = 0;
             let avg_nanos = total_duration_nanos / print_after_ticks as u64;
-            let avg_micros = avg_nanos / 1000;
-            let avg_micros_fraction = (avg_nanos % 1000) / 100;
+            let avg_us = avg_nanos / 1000;
+            let avg_frac = (avg_nanos % 1000) / 100;
+            total_duration_nanos = 0;
 
             defmt::info!(
-                "RATE: Average read time: {}.{} µs (Budget: 125 µs) | Latest burst: {} | Setpoints: {}, PID Outputs: {}",
-                avg_micros,
-                avg_micros_fraction,
+                "[RATE {}.{}µs] Burst: {} | Set: {} | PID: {}",
+                avg_us,
+                avg_frac,
                 burst,
                 setpoints,
-                pid_outputs,
+                pid_outputs
             );
 
-            total_duration_nanos = 0;
+            defmt::info!(
+                "[ACT          ] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
+                frame_out.mixer.servo_left,
+                frame_out.mixer.servo_right,
+                frame_out.actuators.servo_left_us,
+                frame_out.actuators.servo_right_us
+            );
         }
     }
 }

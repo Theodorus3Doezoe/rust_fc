@@ -1,6 +1,10 @@
 pub mod v_copter;
 
-use crate::types::{PwmChannels, Rates};
+use crate::{
+    frames::v_copter::FrameOutput,
+    // mixers::bi_copter::BicopterOutput,
+    types::{PwmChannels, Rates},
+};
 use embedded_hal::pwm::SetDutyCycle;
 
 pub trait Frame {
@@ -8,5 +12,5 @@ pub trait Frame {
     type Mixer;
 
     fn init(channels: PwmChannels<Self::PwmPin>) -> Self;
-    fn apply(&mut self, throttle: f32, pid: Rates);
+    fn apply(&mut self, throttle: f32, pid: Rates) -> FrameOutput;
 }

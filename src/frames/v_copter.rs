@@ -12,6 +12,19 @@ pub struct VCopterFrame<P> {
     mixer: BiCopMixer,
 }
 
+#[derive(Clone, Copy, defmt::Format)]
+pub struct ActuatorOutput {
+    pub servo_left_us: u16,
+    pub servo_right_us: u16,
+    // pub motor_left: f32, // of u16 als je DShot waarden hebt
+    // pub motor_right: f32,
+}
+
+pub struct FrameOutput {
+    pub mixer: BicopterOutput,
+    pub actuators: ActuatorOutput,
+}
+
 impl<P> Frame for VCopterFrame<P>
 where
     P: SetDutyCycle,
@@ -28,13 +41,21 @@ where
         }
     }
 
-    fn apply(&mut self, throttle: f32, pid: Rates) {
+    fn apply(&mut self, throttle: f32, pid: Rates) -> FrameOutput {
         // use inner.mixer
-        let output: BicopterOutput = self.mixer.mix(throttle, pid);
+        let mixer_out: BicopterOutput = self.mixer.mix(throttle, pid);
 
-        self.servo_left.set_duty(output.servo_left);
-        self.servo_right.set_duty(output.servo_right);
+        let servo_left_us = self.servo_left.set_duty(mixer_out.servo_left);
+        let servo_right_us = self.servo_right.set_duty(mixer_out.servo_right);
 
         // motors
+        //
+        FrameOutput {
+            mixer: mixer_out,
+            actuators: ActuatorOutput {
+                servo_left_us,
+                servo_right_us,
+            },
+        }
     }
 }
