@@ -1,4 +1,5 @@
 use crate::actuators::servo::ServoController;
+use crate::config::SERVO_FREQ_HZ;
 use crate::mixers::bi_copter::{self, BiCopMixer, BicopterOutput};
 use crate::types::PwmChannels;
 use embedded_hal::pwm::SetDutyCycle;
@@ -20,8 +21,8 @@ where
 
     fn init(pwm: PwmChannels<P>) -> Self {
         Self {
-            servo_left: ServoController::new(pwm.pwm1, 0.0, false),
-            servo_right: ServoController::new(pwm.pwm2, 0.0, false),
+            servo_left: ServoController::new(pwm.pwm1, 0.0, false, SERVO_FREQ_HZ),
+            servo_right: ServoController::new(pwm.pwm2, 0.0, false, SERVO_FREQ_HZ),
             // temp hard coded
             mixer: bi_copter::BiCopMixer::init(5.0, 0.0, 0.0),
         }
