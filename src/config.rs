@@ -5,6 +5,8 @@ pub use crate::sensors::{Imu, mpu6500::Mpu6500};
 pub type BoardType = Rp2350Dev;
 pub type SelectedImuDriver<SPI> = Mpu6500<SPI>;
 pub type ActiveFrame<P> = VCopterFrame<P>;
+// pub type ActiveTelemetry = usb::UsbTx;
+//
 
 pub mod imu {
     use super::*;
@@ -25,20 +27,13 @@ pub mod frame {
     pub type Concrete = ActiveFrame<Pwm>;
 }
 
-pub mod usb {
-    use super::*;
-    use embassy_usb::UsbDevice;
-    use embassy_usb::class::cdc_acm::CdcAcmClass;
-
-    pub type Driver = <BoardType as Board>::UsbDriver;
-    pub type Device = UsbDevice<'static, Driver>;
-    pub type SerialClass = CdcAcmClass<'static, Driver>;
-
-    pub struct Handles {
-        pub dev: Device,
-        pub serial: SerialClass,
-    }
+pub mod receiver {
+    pub type Concrete = crate::receiver::usb_receiver::UsbReceiver;
 }
+
+// pub mod telemetry {
+//     pub type Concrete = crate::usb::UsbTxDriver;
+// }
 
 pub const RATE_FREQ_HZ: u16 = 8_000;
 pub const GYRO_FILTER_CUTOFF_HZ: f32 = 80.0;

@@ -1,4 +1,6 @@
 // use crate::config::{Board, BoardType, frame, imu};
+use crate::config::{BoardType, frame, receiver};
+use crate::usb::UsbDev;
 use crate::{
     config::*,
     state::{ArmBlockFlags, SYSTEM, State, SystemState},
@@ -10,7 +12,9 @@ pub struct Platform {
     pub board: BoardType,
     pub imu: imu::Calibrated,
     pub frame: frame::Concrete,
-    pub usb: usb::Handles,
+    // pub usb: usb::Handles,
+    pub usb_dev: UsbDev,
+    pub rx: receiver::Concrete,
 }
 
 impl Platform {
@@ -45,16 +49,18 @@ impl Platform {
         // add generic servo driver for pwm_channels
         //
         let usb_driver = board.take_usb_driver();
-        let (usb_dev, class) = setup_usb(usb_driver);
+
+        let usb_dev = crate::usb::UsbManager::init(usb_driver);
+
+        let rx = receiver::Concrete::init();
+        // let tx = telemetry::Concrete::init();
 
         Self {
             board,
             imu,
             frame,
-            usb: usb::Handles {
-                dev: usb_dev,
-                serial: class,
-            },
+            usb_dev,
+            rx,
         }
     }
 }

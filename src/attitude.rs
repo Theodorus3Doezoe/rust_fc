@@ -11,14 +11,12 @@ use crate::{
     types::{ImuBurst, Rates, Vec3},
 };
 
-struct TempSetpoint {
-    roll: f32,
-    pitch: f32,
-    yaw: f32,
-}
-
 #[embassy_executor::task]
-pub async fn attitude_task(mut consumer: ImuConsumer, setpoints: &'static AtomicRates) {
+pub async fn attitude_task(
+    mut consumer: ImuConsumer,
+    attitude_targets: &'static AtomicRates,
+    rate_setpoints: &'static AtomicRates,
+) {
     const MAX_YAW_RATE: f32 = f32::to_radians(180.0);
     const MAX_TILT_RATE: f32 = f32::to_radians(180.0);
 
@@ -33,13 +31,6 @@ pub async fn attitude_task(mut consumer: ImuConsumer, setpoints: &'static Atomic
 
     let roll_controller = AngleController::new(roll_kp, MAX_TILT_RATE);
     let pitch_controller = AngleController::new(pitch_kp, MAX_TILT_RATE);
-
-    // this has to be clamped with max input and normalised to -1.0 and +1.0 from controller input
-    let setpoint = TempSetpoint {
-        roll: 0.0,
-        pitch: 0.0,
-        yaw: 0.0,
-    };
 
     let mut counter: u16 = 0;
 
@@ -102,12 +93,12 @@ pub async fn attitude_task(mut consumer: ImuConsumer, setpoints: &'static Atomic
         }
 
         let set_rates = crate::types::Rates {
-            roll: roll_controller.update(setpoint.roll, roll),
-            pitch: pitch_controller.update(setpoint.pitch, pitch),
-            yaw: setpoint.yaw * MAX_YAW_RATE,
+            roll: roll_controller.update(attitude_targets.roll.get(), roll),
+            pitch: pitch_controller.update(attitude_targets.pitch.get(), pitch),
+            yaw: attitude_targets.yaw.get() * MAX_YAW_RATE,
         };
 
-        setpoints.set(set_rates);
+        rate_setpoints.set(set_rates);
 
         total_duration_nanos += start.elapsed().as_nanos();
 

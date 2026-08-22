@@ -10,7 +10,7 @@ use crate::{
     filters::gyro::GyroFilter,
     frames::v_copter::FrameOutput,
     state::{FailsafeAction, SYSTEM, State, SystemErrorFlags},
-    sync::{AtomicRates, ImuProducer},
+    sync::{AtomicF32, AtomicRates, ImuProducer},
     types::{ImuBurst, Rates},
 };
 
@@ -19,7 +19,8 @@ pub async fn rate_task(
     mut imu: imu::Calibrated,
     mut frame: frame::Concrete,
     mut producer: ImuProducer,
-    setpoints: &'static AtomicRates,
+    rate_setpoints: &'static AtomicRates,
+    throttle: &'static AtomicF32,
 ) {
     let mut ticker = Ticker::every(Duration::from_hz(RATE_FREQ_HZ as u64));
     let mut gyro_filter = GyroFilter::new(RATE_FREQ_HZ as f32, GYRO_FILTER_CUTOFF_HZ);
@@ -84,17 +85,17 @@ pub async fn rate_task(
             }
         };
 
-        let filtered_gyro = gyro_filter.apply(burst.gyro);
-
         let _ = producer.enqueue(burst);
+
+        let filtered_gyro = gyro_filter.apply(burst.gyro);
 
         let mut telemetry: Option<(Rates, Rates, FrameOutput)> = None;
 
         match SYSTEM.get_state() {
             State::Armed => {
-                let sp = setpoints.get();
+                let sp = rate_setpoints.get();
 
-                let pid = rate_pids.update(sp, burst.gyro, RATE_DT);
+                let pid = rate_pids.update(sp, filtered_gyro, RATE_DT);
 
                 let out = frame.apply(0.0, pid);
 

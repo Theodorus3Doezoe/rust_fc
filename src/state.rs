@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
 use defmt::info;
+use serde::{Deserialize, Serialize};
 
 pub static SYSTEM: SystemState = SystemState::new();
 
@@ -41,20 +42,29 @@ pub enum FailsafeAction {
     Land = 1,
 }
 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, defmt::Format)]
+pub enum FlightMode {
+    Angle = 0,
+    Rate = 1,
+}
+
 pub struct SystemState {
     system_state: AtomicU8,
+    flight_mode: AtomicU8,
     arm_errors: AtomicU16,
     system_errors: AtomicU16,
-    failsafe: AtomicU8,
+    failsafe: AtomicU16,
 }
 
 impl SystemState {
     pub const fn new() -> Self {
         Self {
             system_state: AtomicU8::new(State::Init as u8),
+            flight_mode: AtomicU8::new(FlightMode::Angle as u8),
             arm_errors: AtomicU16::new(ArmBlockFlags::CALIBRATING.bits()),
             system_errors: AtomicU16::new(0),
-            failsafe: AtomicU8::new(FailsafeAction::None as u8),
+            failsafe: AtomicU16::new(FailsafeAction::None as u16),
         }
     }
     pub fn set_state(&self, state: State) {
@@ -71,8 +81,20 @@ impl SystemState {
         }
     }
 
+    pub fn get_flight_mode(&self) -> FlightMode {
+        match self.flight_mode.load(Ordering::Relaxed) {
+            0 => FlightMode::Angle,
+            1 => FlightMode::Rate,
+            _ => FlightMode::Angle,
+        }
+    }
+
+    pub fn set_flight_mode(&self, mode: FlightMode) {
+        self.flight_mode.store(mode as u8, Ordering::Relaxed);
+    }
+
     pub fn set_failsafe(&self, state: FailsafeAction) {
-        self.failsafe.store(state as u8, Ordering::Relaxed);
+        self.failsafe.store(state as u16, Ordering::Relaxed);
     }
 
     pub fn get_failsafe(&self) -> FailsafeAction {

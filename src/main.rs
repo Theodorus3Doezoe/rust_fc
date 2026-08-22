@@ -13,6 +13,8 @@ mod frames;
 mod mixers;
 mod platform;
 mod rate;
+mod receiver;
+mod rx_task;
 mod sensors;
 mod state;
 mod sync;
@@ -25,14 +27,16 @@ use crate::{
     attitude::attitude_task,
     rate::rate_task,
     state::{SYSTEM, State},
-    sync::{AtomicRates, ImuQueue},
-    usb::{usb_serial_task, usb_task},
+    sync::{AtomicF32, AtomicRates, ImuQueue},
+    usb::usb_task,
 };
 
 use heapless::spsc::Queue;
 use static_cell::StaticCell;
 
 static IMU_QUEUE: StaticCell<ImuQueue> = StaticCell::new();
+static ATTITUDE_TARGETS: AtomicRates = AtomicRates::new();
+static THROTTLE: AtomicF32 = AtomicF32::new(0.0);
 static RATE_SETPOINTS: AtomicRates = AtomicRates::new();
 
 #[embassy_executor::main]
@@ -41,13 +45,21 @@ async fn main(spawner: Spawner) {
 
     let queue = IMU_QUEUE.init(Queue::new());
     let (producer, consumer) = queue.split();
+    // Receiver task
 
-    // spawner.spawn(rate_task(platform.imu, platform.frame, producer, &RATE_SETPOINTS).unwrap());
-    spawner.spawn(rate_task(platform.imu, platform.frame, producer, &RATE_SETPOINTS).unwrap());
-    spawner.spawn(attitude_task(consumer, &RATE_SETPOINTS).unwrap());
+    spawner.spawn(attitude_task(consumer, &ATTITUDE_TARGETS, &RATE_SETPOINTS).unwrap());
+    spawner.spawn(
+        rate_task(
+            platform.imu,
+            platform.frame,
+            producer,
+            &RATE_SETPOINTS,
+            &THROTTLE,
+        )
+        .unwrap(),
+    );
 
-    spawner.spawn(usb_task(platform.usb.dev).unwrap());
-    spawner.spawn(usb_serial_task(platform.usb.serial).unwrap());
+    spawner.spawn(usb_task(platform.usb_dev).unwrap());
 
     SYSTEM.set_state(State::Disarmed);
 }

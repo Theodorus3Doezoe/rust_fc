@@ -1,55 +1,85 @@
-use crate::state::{SYSTEM, State};
-use crate::sync::AtomicRates;
-use embassy_futures::select::{Either, select};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use embassy_usb::class::cdc_acm::{CdcAcmClass, Receiver, Sender, State as CdcState};
+use crate::config::{Board, BoardType};
+use core::cell::RefCell;
+use critical_section::Mutex;
+use embassy_usb::class::cdc_acm::{
+    CdcAcmClass, Receiver as EmbassyCdcReceiver, Sender as EmbassyCdcSender, State as CdcState,
+};
+use embassy_usb::driver::Driver;
 use embassy_usb::{Builder, Config, UsbDevice};
-use embassy_usb_driver::Driver;
-use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
+
+pub type ConcreteDriver = <BoardType as Board>::UsbDriver;
+pub type UsbRxDriver = EmbassyCdcReceiver<'static, ConcreteDriver>;
+pub type UsbTxDriver = EmbassyCdcSender<'static, ConcreteDriver>;
+pub type UsbDev = UsbDevice<'static, ConcreteDriver>;
 
 static CONFIG_DESC: StaticCell<[u8; 256]> = StaticCell::new();
 static BOS_DESC: StaticCell<[u8; 256]> = StaticCell::new();
 static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
 static CDC_STATE: StaticCell<CdcState> = StaticCell::new();
-use crate::config::usb::{Device as UsbDev, SerialClass};
 
-pub static TELEMETRY_CHANNEL: Channel<CriticalSectionRawMutex, ToPc, 8> = Channel::new();
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ToPc {
-    Attitude {
-        roll: f32,
-        pitch: f32,
-        yaw: f32,
-    },
-    SystemState {
-        state: u8,
-        arm_blocks: u32,
-        errors: u32,
-    },
-    Ack,
-    Log(heapless::String<32>),
+pub struct UsbManager {
+    rx: Option<UsbRxDriver>,
+    tx: Option<UsbTxDriver>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum FromPc {
-    Arm,
-    Disarm,
+impl UsbManager {
+    const fn empty() -> Self {
+        Self { rx: None, tx: None }
+    }
+}
+
+unsafe impl Send for UsbManager {}
+pub static USB_MANAGER: Mutex<RefCell<UsbManager>> = Mutex::new(RefCell::new(UsbManager::empty()));
+
+impl UsbManager {
+    pub fn init(driver: ConcreteDriver) -> UsbDev {
+        let (dev, class) = setup_usb(driver);
+        let (tx, rx) = class.split();
+
+        critical_section::with(|cs| {
+            let mut mgr = USB_MANAGER.borrow(cs).borrow_mut();
+            mgr.rx = Some(rx);
+            mgr.tx = Some(tx);
+        });
+
+        dev
+    }
+
+    pub fn take_rx() -> UsbRxDriver {
+        critical_section::with(|cs| {
+            USB_MANAGER
+                .borrow(cs)
+                .borrow_mut()
+                .rx
+                .take()
+                .expect("USB RX already taken or not initialized")
+        })
+    }
+
+    pub fn take_tx() -> UsbTxDriver {
+        critical_section::with(|cs| {
+            USB_MANAGER
+                .borrow(cs)
+                .borrow_mut()
+                .tx
+                .take()
+                .expect("USB TX already taken or not initialized")
+        })
+    }
 }
 
 pub fn setup_usb<D: Driver<'static>>(
     driver: D,
 ) -> (UsbDevice<'static, D>, CdcAcmClass<'static, D>) {
     let mut config = Config::new(0xc0de, 0xcafe);
-    config.manufacturer = Some("MyDrone");
+    config.manufacturer = Some("RatelDynamics");
     config.product = Some("FlightController");
     config.serial_number = Some("001");
     config.max_power = 100;
     config.max_packet_size_0 = 64;
 
-    let builder = Builder::new(
+    let mut builder = Builder::new(
         driver,
         config,
         CONFIG_DESC.init([0; 256]),
@@ -58,79 +88,13 @@ pub fn setup_usb<D: Driver<'static>>(
         CONTROL_BUF.init([0; 64]),
     );
 
-    let mut builder = builder;
     let class = CdcAcmClass::new(&mut builder, CDC_STATE.init(CdcState::new()), 64);
     let usb_dev = builder.build();
 
     (usb_dev, class)
 }
 
-pub async fn send_msg<D: Driver<'static>, T: Serialize>(
-    sender: &mut Sender<'static, D>,
-    msg: &T,
-) -> Result<(), ()> {
-    let mut buf = [0u8; 128];
-    let serialized = postcard::to_slice(msg, &mut buf).map_err(|_| ())?;
-    sender.write_packet(serialized).await.map_err(|_| ())
-}
-
-pub async fn receive_msg<D: Driver<'static>, T: for<'de> Deserialize<'de>>(
-    receiver: &mut Receiver<'static, D>,
-) -> Result<T, ()> {
-    let mut rx_buf = [0u8; 64];
-    let n = receiver.read_packet(&mut rx_buf).await.map_err(|_| ())?;
-    postcard::from_bytes(&rx_buf[..n]).map_err(|_| ())
-}
-
-pub async fn run_usb<D: Driver<'static>>(mut usb_dev: UsbDevice<'static, D>) {
+#[embassy_executor::task]
+pub async fn usb_task(mut usb_dev: UsbDev) {
     usb_dev.run().await;
-}
-
-pub async fn run_serial<D: Driver<'static>>(class: CdcAcmClass<'static, D>) {
-    let (mut sender, mut receiver) = class.split();
-
-    loop {
-        receiver.wait_connection().await;
-
-        loop {
-            let rx_fut = receive_msg::<D, FromPc>(&mut receiver);
-            let tx_fut = TELEMETRY_CHANNEL.receive();
-
-            match select(rx_fut, tx_fut).await {
-                Either::First(Ok(cmd)) => match cmd {
-                    FromPc::Arm => {
-                        if SYSTEM.can_arm() {
-                            SYSTEM.set_state(State::Armed);
-                            let _ = send_msg(&mut sender, &ToPc::Ack).await;
-                        }
-                    }
-                    FromPc::Disarm => {
-                        SYSTEM.set_state(State::Disarmed);
-                        let _ = send_msg(&mut sender, &ToPc::Ack).await;
-                    }
-                },
-                Either::First(Err(_)) => break,
-
-                Either::Second(msg) => {
-                    if send_msg(&mut sender, &msg).await.is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub fn publish_telemetry(msg: ToPc) {
-    let _ = TELEMETRY_CHANNEL.try_send(msg);
-}
-
-#[embassy_executor::task]
-pub async fn usb_task(usb_dev: UsbDev) {
-    crate::usb::run_usb(usb_dev).await;
-}
-
-#[embassy_executor::task]
-pub async fn usb_serial_task(class: SerialClass) {
-    crate::usb::run_serial(class).await;
 }

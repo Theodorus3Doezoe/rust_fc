@@ -30,3 +30,20 @@ pub struct ActuatorOutput {
     pub motor_left: f32,
     pub motor_right: f32,
 }
+
+use serde::{Deserialize, Serialize};
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ToUsb {
+    Attitude {
+        roll: f32,
+        pitch: f32,
+        yaw: f32,
+    },
+    SystemState {
+        state: u8,
+        arm_blocks: u32,
+        errors: u32,
+    },
+    Ack,
+    Log(heapless::String<32>),
+}
