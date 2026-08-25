@@ -26,10 +26,11 @@ from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.widgets import Frame, TextArea
 from prompt_toolkit.styles import Style
 
-# Import local postcard codec
+# Import local postcard codec and xbox controller module
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import postcard_codec as codec
 from postcard_codec import Attitude, SystemState, Ack, Log, FromPcCommand
+import xbox_controller as xc
 
 
 class SerialInterface:
@@ -51,8 +52,86 @@ class SerialInterface:
         self.latest_state: Optional[SystemState] = SystemState(state=1, arm_blocks=0, errors=0) # 1=DISARMED
         self.log_messages: List[str] = []
 
+        # PID & Filter Tuning Storage (defaults until explicitly set by user)
+        self.pid_settings = {
+            "roll": {"kp": 1.0, "ki": 0.0, "kd": 0.1, "set": False},
+            "pitch": {"kp": 1.0, "ki": 0.0, "kd": 0.1, "set": False},
+            "yaw": {"kp": 2.0, "ki": 0.0, "kd": 0.05, "set": False},
+        }
+        self.filter_settings = {
+            "gyro_cutoff": 100.0,  # Hz
+            "dterm_cutoff": 40.0,  # Hz
+            "set": False,
+        }
+
+        # Active RC State & Hold Controls
+        self.cmd_arm_held = False
+        self.cmd_disarm_held = False
+        self.active_stick_state = None
+
         # Callback for UI notification
         self.on_update_callback = None
+
+    def send_tune_pid(self, axis_name: str, kp: float, ki: float, kd: float) -> bool:
+        axis_map = {"roll": 0, "pitch": 1, "yaw": 2}
+        axis_key = axis_name.lower()
+        if axis_key not in axis_map:
+            self.log(f"[ERROR] Invalid axis name '{axis_name}'. Must be roll, pitch, or yaw.")
+            return False
+
+        axis_id = axis_map[axis_key]
+        self.pid_settings[axis_key] = {"kp": kp, "ki": ki, "kd": kd, "set": True}
+        payload = FromPcCommand.encode_set_pid(axis_id, kp, ki, kd)
+
+        if self.sim:
+            self.tx_count += 1
+            self.log(f"[TX TUNE] PID ({axis_key.upper()}): Kp={kp:.3f}, Ki={ki:.3f}, Kd={kd:.3f}")
+            if self.on_update_callback:
+                self.on_update_callback()
+            return True
+
+        if not self.ser or not self.ser.is_open:
+            self.log(f"[ERROR] Cannot send PID tune: Serial port not connected")
+            return False
+
+        try:
+            self.ser.write(payload)
+            self.ser.flush()
+            self.tx_count += 1
+            self.log(f"[TX TUNE] PID ({axis_key.upper()}): Kp={kp:.3f}, Ki={ki:.3f}, Kd={kd:.3f} ({payload.hex()})")
+            return True
+        except Exception as e:
+            self.error_count += 1
+            self.log(f"[ERROR] Failed to send PID tune: {e}")
+            return False
+
+    def send_tune_filter(self, gyro_cutoff: float, dterm_cutoff: float) -> bool:
+        self.filter_settings["gyro_cutoff"] = gyro_cutoff
+        self.filter_settings["dterm_cutoff"] = dterm_cutoff
+        self.filter_settings["set"] = True
+        payload = FromPcCommand.encode_set_filter(gyro_cutoff, dterm_cutoff)
+
+        if self.sim:
+            self.tx_count += 1
+            self.log(f"[TX TUNE] Filters: Gyro={gyro_cutoff:.1f}Hz, D-Term={dterm_cutoff:.1f}Hz")
+            if self.on_update_callback:
+                self.on_update_callback()
+            return True
+
+        if not self.ser or not self.ser.is_open:
+            self.log(f"[ERROR] Cannot send Filter tune: Serial port not connected")
+            return False
+
+        try:
+            self.ser.write(payload)
+            self.ser.flush()
+            self.tx_count += 1
+            self.log(f"[TX TUNE] Filters: Gyro={gyro_cutoff:.1f}Hz, D-Term={dterm_cutoff:.1f}Hz ({payload.hex()})")
+            return True
+        except Exception as e:
+            self.error_count += 1
+            self.log(f"[ERROR] Failed to send Filter tune: {e}")
+            return False
 
     def log(self, text: str):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -71,6 +150,40 @@ class SerialInterface:
             threading.Thread(target=self._sim_worker, daemon=True).start()
         else:
             threading.Thread(target=self._serial_worker, daemon=True).start()
+        threading.Thread(target=self._rc_tx_loop, daemon=True).start()
+
+    def _rc_tx_loop(self):
+        """Continuously transmits `RcChannels` packets at 100Hz (every 10ms) to the Flight Controller."""
+        last_log_time = 0.0
+        while self.running:
+            time.sleep(0.01) # 100Hz frame rate (10ms interval)
+            if not self.is_connected and not self.sim:
+                continue
+
+            st = getattr(self, "active_stick_state", None)
+            if st:
+                roll = st.roll
+                pitch = st.pitch
+                yaw = st.yaw
+                throttle = st.throttle
+                arm = st.arm_pressed
+                disarm = st.disarm_pressed
+            else:
+                roll = 0.0
+                pitch = 0.0
+                yaw = 0.0
+                throttle = 0.0
+                arm = getattr(self, "cmd_arm_held", False)
+                disarm = getattr(self, "cmd_disarm_held", False)
+
+            # Send 19-byte RcChannels packet
+            self.send_rc_channels(roll, pitch, yaw, throttle, arm, disarm)
+
+            now = time.time()
+            if (arm or disarm) and (now - last_log_time > 0.5):
+                last_log_time = now
+                lbl = "ARM (HOLDING)" if arm else "DISARM (HOLDING)"
+                self.log(f"[TX RC STREAM] {lbl} thr={throttle:.2f} r={roll:+.2f} p={pitch:+.2f} y={yaw:+.2f}")
 
     def stop(self):
         self.running = False
@@ -95,25 +208,46 @@ class SerialInterface:
             self.log(f"[CONN] Switched to device port: {target}")
         self.start()
 
+    def send_rc_channels(self, roll: float = 0.0, pitch: float = 0.0, yaw: float = 0.0,
+                         throttle: float = 0.0, arm: bool = False, disarm: bool = False, mode: int = 0) -> bool:
+        """Send Postcard-encoded `RcChannels` packet matching `src/receiver/receiver.rs`."""
+        payload = FromPcCommand.encode_rc_channels(roll, pitch, yaw, throttle, arm, disarm, mode)
+        if self.sim:
+            self.tx_count += 1
+            return True
+
+        if not self.ser or not self.ser.is_open:
+            return False
+
+        try:
+            self.ser.write(payload)
+            self.ser.flush()
+            self.tx_count += 1
+            return True
+        except Exception:
+            self.error_count += 1
+            return False
+
     def send_cmd(self, cmd_name: str) -> bool:
         cmd_name = cmd_name.strip().lower()
-        if cmd_name == "arm":
-            payload = FromPcCommand.encode_arm()
+        arm_flag = (cmd_name == "arm")
+        disarm_flag = (cmd_name == "disarm")
+
+        if arm_flag:
             label = "ARM"
-        elif cmd_name == "disarm":
-            payload = FromPcCommand.encode_disarm()
+        elif disarm_flag:
             label = "DISARM"
         else:
             self.log(f"[ERROR] Unknown command: '{cmd_name}'")
             return False
 
+        # Send ONLY the 19-byte RcChannels packet (src/receiver/receiver.rs)
+        success = self.send_rc_channels(arm=arm_flag, disarm=disarm_flag)
+
         if self.sim:
-            self.tx_count += 1
             self.log(f"[TX] Sent command: {label}")
-            # In simulation, respond with Ack and state change after a short delay
             def sim_respond():
                 time.sleep(0.05)
-                # Ack message
                 self.rx_count += 1
                 self.log(f"[RX] Received ToPc::Ack for {label}")
                 if label == "ARM":
@@ -131,19 +265,11 @@ class SerialInterface:
             threading.Thread(target=sim_respond, daemon=True).start()
             return True
 
-        if not self.ser or not self.ser.is_open:
-            self.log(f"[ERROR] Cannot send {label}: Serial port not connected")
-            return False
-
-        try:
-            self.ser.write(payload)
-            self.ser.flush()
-            self.tx_count += 1
-            self.log(f"[TX] Sent {label} ({payload.hex()})")
+        if success:
+            self.log(f"[TX] Sent {label} (RcChannels packet)")
             return True
-        except Exception as e:
-            self.error_count += 1
-            self.log(f"[ERROR] Failed to send {label}: {e}")
+        else:
+            self.log(f"[ERROR] Failed to send {label}: Serial port not connected")
             return False
 
     def _serial_worker(self):
@@ -268,17 +394,25 @@ def list_ports():
         print(f"  - {p.device:<15} [{vid_pid}] {desc}")
 
 
-def run_tui(serial_if: SerialInterface):
+def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
     """Launch the interactive TUI using prompt_toolkit."""
 
     # UI State controls
     header_control = FormattedTextControl()
     att_control = FormattedTextControl()
     sys_control = FormattedTextControl()
+    ctrl_control = FormattedTextControl()
+    tune_control = FormattedTextControl()
     log_control = FormattedTextControl()
 
+    # Xbox Controller Handler
+    xbox_reader = xc.XboxControllerReader(sim=xbox_sim)
+    xbox_reader.on_arm_callback = lambda: serial_if.send_cmd("arm")
+    xbox_reader.on_disarm_callback = lambda: serial_if.send_cmd("disarm")
+    xbox_reader.start()
+
     command_completer = WordCompleter(
-        ["arm", "disarm", "clear", "help", "quit", "exit"],
+        ["arm", "disarm", "tune", "set", "xbox", "device", "port", "connect", "clear", "help", "quit", "exit"],
         ignore_case=True
     )
 
@@ -360,17 +494,82 @@ def run_tui(serial_if: SerialInterface):
             ("class:value", f"{sys_st.errors}\n"),
         ]
 
+    def update_controller():
+        st = xbox_reader.state
+        if not st.connected:
+            return [
+                ("class:label", "  Gamepad Status : "),
+                ("class:ansired", f"{st.device_name}\n"),
+                ("class:dim", "  (Press 'x' for Controller Simulator)\n")
+            ]
+
+        r_bar = render_horizon_bar(st.roll, max_val=1.0, width=14)
+        p_bar = render_horizon_bar(st.pitch, max_val=1.0, width=14)
+        y_bar = render_horizon_bar(st.yaw, max_val=1.0, width=14)
+
+        t_pos = max(0, min(13, int(st.throttle * 13)))
+        t_bar_list = ["="] * 14
+        t_bar_list[t_pos] = "O"
+        t_bar = "".join(t_bar_list)
+
+        return [
+            ("class:label", "  Roll (R-Stick X) : "),
+            ("class:value", f"{st.roll:+5.2f} "),
+            ("class:bar", f"[{r_bar}]\n"),
+            ("class:label", "  Pitch (L-Stick Y): "),
+            ("class:value", f"{st.pitch:+5.2f} "),
+            ("class:bar", f"[{p_bar}]\n"),
+            ("class:label", "  Yaw (LT - / RT+) : "),
+            ("class:value", f"{st.yaw:+5.2f} "),
+            ("class:bar", f"[{y_bar}]\n"),
+            ("class:label", "  Throttle (D-Pad) : "),
+            ("class:value", f"{st.throttle:5.2f} "),
+            ("class:bar", f"[{t_bar}]\n"),
+        ]
+
+    def update_tuning():
+        pids = serial_if.pid_settings
+        flt = serial_if.filter_settings
+
+        def fmt_pid(axis_label, key):
+            d = pids[key]
+            val_style = "class:value" if d["set"] else "class:dim"
+            tag_style = "ansigreen" if d["set"] else "class:dim"
+            tag_text = "[SET]" if d["set"] else "[DEFAULT]"
+            return [
+                ("class:label", f"  {axis_label:<5} PID : "),
+                (val_style, f"Kp={d['kp']:5.2f} Ki={d['ki']:5.2f} Kd={d['kd']:5.2f} "),
+                (tag_style, f"{tag_text}\n")
+            ]
+
+        flt_val_style = "class:value" if flt["set"] else "class:dim"
+        flt_tag_style = "ansigreen" if flt["set"] else "class:dim"
+        flt_tag_text = "[SET]" if flt["set"] else "[DEFAULT]"
+
+        res = []
+        res.extend(fmt_pid("Roll", "roll"))
+        res.extend(fmt_pid("Pitch", "pitch"))
+        res.extend(fmt_pid("Yaw", "yaw"))
+        res.extend([
+            ("class:label", "  Gyro Cutoff: "),
+            (flt_val_style, f"{flt['gyro_cutoff']:5.1f} Hz  "),
+            ("class:label", "D-Term Cutoff: "),
+            (flt_val_style, f"{flt['dterm_cutoff']:5.1f} Hz "),
+            (flt_tag_style, f"{flt_tag_text}\n")
+        ])
+        return res
+
     def update_log():
         lines = serial_if.log_messages[-25:]
         formatted = []
         for line in lines:
             if "[RX]" in line or "Ack" in line:
                 formatted.append(("ansigreen", line + "\n"))
-            elif "[TX]" in line:
+            elif "[TX]" in line or "[TX TUNE]" in line:
                 formatted.append(("ansicyan", line + "\n"))
             elif "[ERROR]" in line or "[FAIL]" in line:
                 formatted.append(("ansired", line + "\n"))
-            elif "[FC LOG]" in line:
+            elif "[FC LOG]" in line or "[XBOX]" in line or "TUNING" in line:
                 formatted.append(("ansiyellow", line + "\n"))
             else:
                 formatted.append(("", line + "\n"))
@@ -380,13 +579,20 @@ def run_tui(serial_if: SerialInterface):
         header_control.text = update_header()
         att_control.text = update_attitude()
         sys_control.text = update_system()
+        ctrl_control.text = update_controller()
+        tune_control.text = update_tuning()
         log_control.text = update_log()
         try:
             get_app().invalidate()
         except Exception:
             pass
 
+    def on_xbox_change(st):
+        serial_if.active_stick_state = st
+        refresh_ui()
+
     serial_if.on_update_callback = refresh_ui
+    xbox_reader.on_state_change = on_xbox_change
 
     current_ports_cache = []
 
@@ -408,28 +614,38 @@ def run_tui(serial_if: SerialInterface):
         serial_if.log(f"Type 'connect <nr>' or number (1-{sim_idx}) to select device.")
         refresh_ui()
 
+    def show_tuning_menu():
+        pids = serial_if.pid_settings
+        flt = serial_if.filter_settings
+        serial_if.log("================ 🎛️ PID & FILTER TUNING MENU ================")
+        serial_if.log(f"  Roll  PID -> Kp: {pids['roll']['kp']:.3f}, Ki: {pids['roll']['ki']:.3f}, Kd: {pids['roll']['kd']:.3f}")
+        serial_if.log(f"  Pitch PID -> Kp: {pids['pitch']['kp']:.3f}, Ki: {pids['pitch']['ki']:.3f}, Kd: {pids['pitch']['kd']:.3f}")
+        serial_if.log(f"  Yaw   PID -> Kp: {pids['yaw']['kp']:.3f}, Ki: {pids['yaw']['ki']:.3f}, Kd: {pids['yaw']['kd']:.3f}")
+        serial_if.log(f"  Gyro Cutoff   -> {flt['gyro_cutoff']:.1f} Hz")
+        serial_if.log(f"  D-Term Cutoff -> {flt['dterm_cutoff']:.1f} Hz")
+        serial_if.log("------------------------------------------------------------")
+        serial_if.log("Commands to live tune:")
+        serial_if.log("  tune roll <kp> <ki> <kd>   (e.g., tune roll 1.2 0.05 0.15)")
+        serial_if.log("  tune pitch <kp> <ki> <kd>  (e.g., tune pitch 1.4 0.05 0.18)")
+        serial_if.log("  tune yaw <kp> <ki> <kd>    (e.g., tune yaw 2.0 0.10 0.05)")
+        serial_if.log("  tune gyro <cutoff_hz>      (e.g., tune gyro 100)")
+        serial_if.log("  tune dterm <cutoff_hz>     (e.g., tune dterm 40)")
+        refresh_ui()
+
     def show_help():
         serial_if.log("Available Hotkeys & Commands:")
-        serial_if.log("  [a] / arm     - Send ARM command to Flight Controller")
-        serial_if.log("  [d] / disarm  - Send DISARM command to Flight Controller")
+        serial_if.log("  [a] / arm     - Send ARM command (Btn A on Xbox Controller)")
+        serial_if.log("  [d] / disarm  - Send DISARM command (Btn B on Xbox Controller)")
+        serial_if.log("  [t] / tune    - Open Live PID & Filter Tuning Menu")
+        serial_if.log("  [x]           - Toggle Xbox Controller Simulator mode")
         serial_if.log("  [p] / device  - Open Device/Port selection menu")
         serial_if.log("  [h] / help    - Display this help message")
         serial_if.log("  [c] / clear   - Clear event log box")
         serial_if.log("  quit / exit   - Exit the TUI application")
+        serial_if.log("Xbox Mappings:")
+        serial_if.log("  R-Stick X: Roll (-1..+1) | L-Stick Y: Pitch (-1..+1)")
+        serial_if.log("  LT / RT  : Yaw (-1..+1)  | D-Pad UP/DN: Throttle (0..1)")
         refresh_ui()
-
-    command_completer = WordCompleter(
-        ["arm", "disarm", "device", "port", "connect", "clear", "help", "quit", "exit"],
-        ignore_case=True
-    )
-
-    input_field = TextArea(
-        height=1,
-        prompt="fc> ",
-        completer=command_completer,
-        multiline=False,
-        focus_on_click=True
-    )
 
     # Keybindings
     kb = KeyBindings()
@@ -446,9 +662,30 @@ def run_tui(serial_if: SerialInterface):
 
     @kb.add("d")
     @kb.add("D")
+    @kb.add("b")
+    @kb.add("B")
     def _hotkey_disarm(event):
-        serial_if.log("🚨 DISARM TRIGGERED VIA 'D' KEY!")
+        serial_if.log("🚨 DISARM TRIGGERED VIA HOTKEY!")
         serial_if.send_cmd("disarm")
+        refresh_ui()
+
+    @kb.add("t")
+    @kb.add("T")
+    def _hotkey_tuning_menu(event):
+        show_tuning_menu()
+
+    @kb.add("x")
+    @kb.add("X")
+    def _toggle_xbox_sim(event):
+        xbox_reader.sim = not xbox_reader.sim
+        if xbox_reader.sim:
+            xbox_reader.state.connected = True
+            xbox_reader.state.device_name = "Xbox Controller (Simulator)"
+            serial_if.log("[XBOX] Switched to Xbox Controller SIMULATOR mode.")
+        else:
+            xbox_reader.state.connected = False
+            xbox_reader.state.device_name = "Searching for Gamepad..."
+            serial_if.log("[XBOX] Searching for physical Xbox Controller (/dev/input/js*)...")
         refresh_ui()
 
     @kb.add("p")
@@ -491,10 +728,40 @@ def run_tui(serial_if: SerialInterface):
         elif cmd in ("p", "s", "port", "device", "menu"):
             show_device_menu()
             return
+        elif cmd in ("t", "tune", "pid", "filter"):
+            show_tuning_menu()
+            return
+        elif cmd in ("x", "xbox"):
+            _toggle_xbox_sim(None)
+            return
         elif cmd in ("a", "arm"):
             serial_if.send_cmd("arm")
         elif cmd in ("d", "disarm"):
             serial_if.send_cmd("disarm")
+        elif parts[0] in ("tune", "set") and len(parts) > 1:
+            sub = parts[1]
+            if sub in ("roll", "pitch", "yaw") and len(parts) >= 5:
+                try:
+                    kp = float(parts[2])
+                    ki = float(parts[3])
+                    kd = float(parts[4])
+                    serial_if.send_tune_pid(sub, kp, ki, kd)
+                except ValueError:
+                    serial_if.log("[ERROR] Invalid numbers. Format: tune <roll|pitch|yaw> <kp> <ki> <kd>")
+            elif sub in ("gyro", "gyro_filter") and len(parts) >= 3:
+                try:
+                    cutoff = float(parts[2])
+                    serial_if.send_tune_filter(cutoff, serial_if.filter_settings["dterm_cutoff"])
+                except ValueError:
+                    serial_if.log("[ERROR] Invalid cutoff Hz. Format: tune gyro <cutoff_hz>")
+            elif sub in ("dterm", "dterm_filter") and len(parts) >= 3:
+                try:
+                    cutoff = float(parts[2])
+                    serial_if.send_tune_filter(serial_if.filter_settings["gyro_cutoff"], cutoff)
+                except ValueError:
+                    serial_if.log("[ERROR] Invalid cutoff Hz. Format: tune dterm <cutoff_hz>")
+            else:
+                show_tuning_menu()
         elif parts[0] in ("connect", "select", "use") and len(parts) > 1:
             target = parts[1]
             if target.isdigit():
@@ -518,7 +785,7 @@ def run_tui(serial_if: SerialInterface):
             else:
                 serial_if.log(f"[ERROR] Invalid device number: {idx}")
         else:
-            serial_if.log(f"Unknown command '{text}'. Press 'h' for help or 'p' for device menu.")
+            serial_if.log(f"Unknown command '{text}'. Press 'h' for help, 't' for tuning, or 'p' for device menu.")
 
     input_field.accept_handler = handle_command
 
@@ -529,12 +796,14 @@ def run_tui(serial_if: SerialInterface):
             HSplit([
                 Frame(Window(content=att_control, height=5), title="Attitude (AHRS)"),
                 Frame(Window(content=sys_control, height=5), title="System State"),
-            ], width=44),
+                Frame(Window(content=ctrl_control, height=6), title="🎮 Xbox FlightStick (Norm -1.0 .. 1.0)"),
+                Frame(Window(content=tune_control, height=5), title="🎛️ PID & Filter Live Tuning"),
+            ], width=48),
             Frame(Window(content=log_control), title="Event & Packet Log"),
         ]),
         Frame(
             input_field,
-            title="Hotkeys: [a] Arm | [d] Disarm | [p] Devices | [h] Help | [c] Clear | [quit] Exit"
+            title="Hotkeys: [a] Arm | [d] Disarm | [t] PID Tune | [x] Controller Sim | [p] Devices | [h] Help"
         ),
     ])
 
@@ -561,15 +830,17 @@ def run_tui(serial_if: SerialInterface):
         app.run()
     finally:
         serial_if.stop()
+        xbox_reader.stop()
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Rust FC USB Serial CLI & TUI tool (supported commands: arm, disarm)"
+        description="Rust FC USB Serial CLI & TUI tool (supported commands: arm, disarm, xbox)"
     )
     parser.add_argument("-p", "--port", type=str, help="Serial port device (e.g. /dev/ttyACM0 or COM3)")
     parser.add_argument("-b", "--baud", type=int, default=115200, help="Baud rate (default: 115200)")
-    parser.add_argument("-s", "--sim", action="store_true", help="Enable simulation mode (no hardware required)")
+    parser.add_argument("-s", "--sim", action="store_true", help="Enable serial simulation mode")
+    parser.add_argument("--xbox-sim", action="store_true", help="Enable Xbox Controller simulator mode")
     parser.add_argument("-l", "--list", action="store_true", help="List available serial ports and exit")
     parser.add_argument("command", nargs="?", choices=["arm", "disarm", "status"], help="Optional single command to execute")
 
@@ -606,7 +877,7 @@ def main():
 
     # Interactive TUI mode
     ser_if = SerialInterface(port=args.port, baud=args.baud, sim=args.sim)
-    run_tui(ser_if)
+    run_tui(ser_if, xbox_sim=args.xbox_sim)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ use crate::{
     config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
     controllers::p_controller::AngleController,
     filters::vqf,
-    state::{ArmBlockFlags, SYSTEM},
+    state::{ArmBlockFlags, FlightMode, SYSTEM},
     sync::{AtomicRates, ImuConsumer},
     types::{ImuBurst, Rates, Vec3},
 };
@@ -14,7 +14,7 @@ use crate::{
 #[embassy_executor::task]
 pub async fn attitude_task(
     mut consumer: ImuConsumer,
-    attitude_targets: &'static AtomicRates,
+    pilot_input: &'static AtomicRates,
     rate_setpoints: &'static AtomicRates,
 ) {
     const MAX_YAW_RATE: f32 = f32::to_radians(180.0);
@@ -92,11 +92,15 @@ pub async fn attitude_task(
             }
         }
 
-        let set_rates = crate::types::Rates {
-            roll: roll_controller.update(attitude_targets.roll.get(), roll),
-            pitch: pitch_controller.update(attitude_targets.pitch.get(), pitch),
-            yaw: attitude_targets.yaw.get() * MAX_YAW_RATE,
-        };
+        let mut set_rates = pilot_input.get();
+
+        if SYSTEM.get_flight_mode() == FlightMode::Angle {
+            set_rates = Rates {
+                roll: roll_controller.update(pilot_input.roll.get(), roll),
+                pitch: pitch_controller.update(pilot_input.pitch.get(), pitch),
+                yaw: pilot_input.yaw.get() * MAX_YAW_RATE,
+            };
+        }
 
         rate_setpoints.set(set_rates);
 
@@ -112,18 +116,18 @@ pub async fn attitude_task(
 
             let rest = vqf.is_rest();
 
-            defmt::info!(
-                "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
-                avg_us,
-                avg_frac,
-                roll.to_degrees(),
-                pitch.to_degrees(),
-                yaw.to_degrees(),
-                set_rates.roll.to_degrees(),
-                set_rates.pitch.to_degrees(),
-                set_rates.yaw.to_degrees(),
-                rest
-            );
+            // defmt::info!(
+            //     "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
+            //     avg_us,
+            //     avg_frac,
+            //     roll.to_degrees(),
+            //     pitch.to_degrees(),
+            //     yaw.to_degrees(),
+            //     set_rates.roll.to_degrees(),
+            //     set_rates.pitch.to_degrees(),
+            //     set_rates.yaw.to_degrees(),
+            //     rest
+            // );
         }
     }
 }

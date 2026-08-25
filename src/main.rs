@@ -35,7 +35,7 @@ use heapless::spsc::Queue;
 use static_cell::StaticCell;
 
 static IMU_QUEUE: StaticCell<ImuQueue> = StaticCell::new();
-static ATTITUDE_TARGETS: AtomicRates = AtomicRates::new();
+static PILOT_INPUT: AtomicRates = AtomicRates::new();
 static THROTTLE: AtomicF32 = AtomicF32::new(0.0);
 static RATE_SETPOINTS: AtomicRates = AtomicRates::new();
 
@@ -46,8 +46,8 @@ async fn main(spawner: Spawner) {
     let queue = IMU_QUEUE.init(Queue::new());
     let (producer, consumer) = queue.split();
     // Receiver task
-
-    spawner.spawn(attitude_task(consumer, &ATTITUDE_TARGETS, &RATE_SETPOINTS).unwrap());
+    spawner.spawn(rx_task::receiver_task(platform.rx, &THROTTLE, &PILOT_INPUT).unwrap());
+    spawner.spawn(attitude_task(consumer, &PILOT_INPUT, &RATE_SETPOINTS).unwrap());
     spawner.spawn(
         rate_task(
             platform.imu,

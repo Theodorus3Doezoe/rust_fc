@@ -1,13 +1,12 @@
-use crate::state::FlightMode;
+use crate::{state::FlightMode, types::Rates};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, defmt::Format)]
 pub struct RcChannels {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
+    pub rates: Rates,
     pub throttle: f32,
     pub arm: bool,
+    pub disarm: bool,
     pub mode: FlightMode,
 }
 

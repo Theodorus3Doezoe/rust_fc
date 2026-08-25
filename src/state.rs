@@ -43,7 +43,7 @@ pub enum FailsafeAction {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, defmt::Format)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, defmt::Format, PartialEq, Eq)]
 pub enum FlightMode {
     Angle = 0,
     Rate = 1,

@@ -4,7 +4,7 @@ pub struct Vec3 {
     pub y: f32,
     pub z: f32,
 }
-#[derive(Debug, Clone, Copy, defmt::Format, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, defmt::Format, Default)]
 pub struct Rates {
     pub roll: f32,
     pub pitch: f32,

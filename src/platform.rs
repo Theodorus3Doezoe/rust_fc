@@ -9,10 +9,9 @@ use crate::{
 // use crate::config::{Board, BoardType, ConcreteImu, RawImu};
 
 pub struct Platform {
-    pub board: BoardType,
+    pub board: BoardType, // can be dropped
     pub imu: imu::Calibrated,
     pub frame: frame::Concrete,
-    // pub usb: usb::Handles,
     pub usb_dev: UsbDev,
     pub rx: receiver::Concrete,
 }
@@ -44,6 +43,9 @@ impl Platform {
         }
 
         let pwm_channels = board.take_pwm_channels(); // todo
+
+        // motor pins
+
         let frame = frame::Concrete::init(pwm_channels);
         // make the channels more seperated and dynamic
         // add generic servo driver for pwm_channels

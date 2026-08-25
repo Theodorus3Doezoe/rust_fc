@@ -14,9 +14,20 @@ Ondersteunt alle commando's en datatypes die zijn gedefinieerd in [`src/usb.rs`]
 - **`Ack`**: Ontvangstbevestigingen van het board na een verzonden commando.
 - **`Log`**: Real-time logberichten afkomstig van het Flight Controller board.
 
-### 2. Uitgaande Commando's (`FromPc` berichten)
-- **`arm`**: Stuurt het `FromPc::Arm` (`0x00`) commando naar de Flight Controller.
-- **`disarm`**: Stuurt het `FromPc::Disarm` (`0x01`) commando naar de Flight Controller.
+### 3. Xbox One Controller FlightStick Besturing
+- **Right Stick X-as**: **Roll** (genormaliseerd van `-1.0` [links] tot `+1.0` [rechts]).
+- **Left Stick Y-as**: **Pitch** (genormaliseerd van `-1.0` [achter] tot `+1.0` [vooruit]).
+- **LT / RT Triggers**: **Yaw** (LT = negatieve yaw tot `-1.0`, RT = positieve yaw tot `+1.0`).
+- **D-Pad Omhoog / Omlaag**: **Throttle** (Cruise control stijl: verhoogt/verlaagt gasniveau tussen `0.0` en `1.0`).
+- **A Knop**: Verzendt het **`ARM`** commando naar de Flight Controller.
+- **B Knop**: Verzendt het **`DISARM`** commando naar de Flight Controller.
+
+### 4. 🎛️ Live PID & Filter Tuning
+- **Roll PID**: `tune roll <kp> <ki> <kd>` (bijv. `tune roll 1.2 0.05 0.15`)
+- **Pitch PID**: `tune pitch <kp> <ki> <kd>` (bijv. `tune pitch 1.4 0.05 0.18`)
+- **Yaw PID**: `tune yaw <kp> <ki> <kd>` (bijv. `tune yaw 2.0 0.10 0.05`)
+- **Gyro Filter Cutoff**: `tune gyro <hz>` (bijv. `tune gyro 100`)
+- **D-Term Filter Cutoff**: `tune dterm <hz>` (bijv. `tune dterm 40`)
 
 ---
 
@@ -36,20 +47,19 @@ pip install -r tools/requirements.txt
 Start de volledige Terminal UI:
 
 ```bash
-# Automatisch een USB seriele poort zoeken en verbinden
+# Met automatische Xbox controller detectie & USB Flight Controller:
 python3 tools/usb_tui.py
 
-# Specifieke poort opgeven
-python3 tools/usb_tui.py -p /dev/ttyACM0
-
-# Simulatielogica starten (zonder fysieke hardware)
-python3 tools/usb_tui.py --sim
+# Xbox Controller + Serial simulatie inschakelen (zonder hardware):
+python3 tools/usb_tui.py --xbox-sim --sim
 ```
 
 **Sneltoetsen & Commando's in TUI:**
-- **`a`**: Direct **ARM** commando verzenden.
-- **`d`**: Direct **DISARM** commando verzenden (vervangt `q`).
-- **`p`** / **`s`**: **Device Selection Menu** openen om van USB poort of naar de Simulator te wisselen.
+- **`a`** (of **A-knop op Xbox Controller**): Verzend **ARM** commando.
+- **`d`** (of **B-knop op Xbox Controller**): Verzend **DISARM** commando.
+- **`t`**: Open het **PID & Filter Tuning Menu**.
+- **`x`**: Schakel **Xbox Controller Simulator** in/uit.
+- **`p`** / **`s`**: **Device Selection Menu** openen.
 - **`h`**: **Help** informatie tonen.
 - **`c`**: **Clear** logvenster.
 - `Ctrl+C` of typ `quit` : Sluit de applicatie.

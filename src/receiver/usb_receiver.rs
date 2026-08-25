@@ -41,8 +41,8 @@ impl Receiver for UsbReceiver {
 
     async fn receive(&mut self) -> Result<RcChannels, Self::Error> {
         let n = self.rx.read_packet(&mut self.buffer).await?;
+        if n == 0 {};
         let msg: RcChannels = postcard::from_bytes(&self.buffer[..n])?;
-
         Ok(msg)
     }
 }

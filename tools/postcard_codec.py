@@ -89,18 +89,68 @@ class Log:
 ToPcMessage = Union[Attitude, SystemState, Ack, Log]
 
 
+@dataclass
+class Rates:
+    roll: float
+    pitch: float
+    yaw: float
+
+
+@dataclass
+class RcChannels:
+    rates: Rates
+    throttle: float
+    arm: bool
+    disarm: bool
+    mode: int = 0  # 0: FlightMode::Angle, 1: FlightMode::Rate
+
+
 class FromPcCommand:
-    """Commands sent from PC to Flight Controller (FromPc enum)."""
+    """Commands and RC Channel packets sent from PC to Flight Controller."""
     
     @staticmethod
+    def encode_rc_channels(roll: float, pitch: float, yaw: float, throttle: float,
+                           arm: bool, disarm: bool, mode: int = 0) -> bytes:
+        """
+        Postcard serialization for `RcChannels` struct (src/receiver/receiver.rs):
+        struct RcChannels {
+            rates: Rates { roll: f32, pitch: f32, yaw: f32 },
+            throttle: f32,
+            arm: bool,
+            disarm: bool,
+            mode: FlightMode (0: Angle, 1: Rate)
+        }
+        """
+        floats_bytes = struct.pack("<ffff", roll, pitch, yaw, throttle)
+        arm_byte = b"\x01" if arm else b"\x00"
+        disarm_byte = b"\x01" if disarm else b"\x00"
+        mode_varint = encode_varint(mode)
+        return floats_bytes + arm_byte + disarm_byte + mode_varint
+
+    @staticmethod
     def encode_arm() -> bytes:
-        # Variant index 0
+        # Backward compatibility FromPc::Arm variant
         return encode_varint(0)
 
     @staticmethod
     def encode_disarm() -> bytes:
-        # Variant index 1
+        # Backward compatibility FromPc::Disarm variant
         return encode_varint(1)
+
+    @staticmethod
+    def encode_set_pid(axis: int, kp: float, ki: float, kd: float) -> bytes:
+        """
+        Variant index 2: SetPid { axis: u8, kp: f32, ki: f32, kd: f32 }
+        axis: 0 = Roll, 1 = Pitch, 2 = Yaw
+        """
+        return encode_varint(2) + struct.pack("<Bfff", axis, kp, ki, kd)
+
+    @staticmethod
+    def encode_set_filter(gyro_cutoff: float, dterm_cutoff: float) -> bytes:
+        """
+        Variant index 3: SetFilter { gyro_cutoff: f32, dterm_cutoff: f32 }
+        """
+        return encode_varint(3) + struct.pack("<ff", gyro_cutoff, dterm_cutoff)
 
 
 def decode_to_pc_packet(data: bytes) -> Tuple[Optional[ToPcMessage], int]:

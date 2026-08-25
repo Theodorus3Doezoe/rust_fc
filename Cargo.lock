@@ -588,6 +588,7 @@ dependencies = [
  "biquad",
  "bitflags 2.13.1",
  "cortex-m-rt",
+ "critical-section",
  "defmt",
  "defmt-rtt",
  "embassy-embedded-hal",
