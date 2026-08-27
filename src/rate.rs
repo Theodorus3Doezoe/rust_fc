@@ -1,11 +1,7 @@
-use core::sync::atomic::Ordering;
-
-use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Ticker};
 
 use crate::{
-    config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
+    config::{ActiveBoard, Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
     filters::gyro::GyroFilter,
     frames::v_copter::FrameOutput,

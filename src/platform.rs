@@ -1,5 +1,5 @@
 // use crate::config::{Board, BoardType, frame, imu};
-use crate::config::{BoardType, frame, receiver};
+use crate::config::{ActiveBoard, frame, receiver};
 use crate::usb::UsbDev;
 use crate::{
     config::*,
@@ -9,7 +9,7 @@ use crate::{
 // use crate::config::{Board, BoardType, ConcreteImu, RawImu};
 
 pub struct Platform {
-    pub board: BoardType, // can be dropped
+    pub board: ActiveBoard, // can be dropped
     pub imu: imu::Calibrated,
     pub frame: frame::Concrete,
     pub usb_dev: UsbDev,
@@ -18,7 +18,7 @@ pub struct Platform {
 
 impl Platform {
     pub async fn init() -> Self {
-        let mut board = BoardType::init();
+        let mut board = ActiveBoard::init();
         let mut imu_spi_device = board.take_imu_spi();
 
         imu::Raw::init_registers(&mut imu_spi_device)
@@ -42,11 +42,9 @@ impl Platform {
             }
         }
 
-        let pwm_channels = board.take_pwm_channels(); // todo
+        // give frame init board actuator as provider to frame
 
-        // motor pins
-
-        let frame = frame::Concrete::init(pwm_channels);
+        let frame = frame::Concrete::init(&mut board);
         // make the channels more seperated and dynamic
         // add generic servo driver for pwm_channels
         //

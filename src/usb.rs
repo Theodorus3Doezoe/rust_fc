@@ -1,4 +1,4 @@
-use crate::config::{Board, BoardType};
+use crate::config::{ActiveBoard, Board};
 use core::cell::RefCell;
 use critical_section::Mutex;
 use embassy_usb::class::cdc_acm::{
@@ -8,7 +8,7 @@ use embassy_usb::driver::Driver;
 use embassy_usb::{Builder, Config, UsbDevice};
 use static_cell::StaticCell;
 
-pub type ConcreteDriver = <BoardType as Board>::UsbDriver;
+pub type ConcreteDriver = <ActiveBoard as Board>::UsbDriver;
 pub type UsbRxDriver = EmbassyCdcReceiver<'static, ConcreteDriver>;
 pub type UsbTxDriver = EmbassyCdcSender<'static, ConcreteDriver>;
 pub type UsbDev = UsbDevice<'static, ConcreteDriver>;

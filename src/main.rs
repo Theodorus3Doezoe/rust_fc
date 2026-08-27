@@ -10,6 +10,7 @@ mod config;
 mod controllers;
 mod filters;
 mod frames;
+mod helpers;
 mod mixers;
 mod platform;
 mod rate;

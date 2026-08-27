@@ -2,9 +2,9 @@ pub use crate::boards::{Board, rp2350dev::Rp2350Dev};
 pub use crate::frames::{Frame, v_copter::VCopterFrame};
 pub use crate::sensors::{Imu, mpu6500::Mpu6500};
 
-pub type BoardType = Rp2350Dev;
+pub type ActiveBoard = Rp2350Dev;
 pub type SelectedImuDriver<SPI> = Mpu6500<SPI>;
-pub type ActiveFrame<P> = VCopterFrame<P>;
+pub type ActiveFrame<P, M> = VCopterFrame<P, M>;
 // pub type ActiveTelemetry = usb::UsbTx;
 //
 
@@ -15,16 +15,20 @@ pub mod imu {
     pub const INIT_FREQ_HZ: u32 = 1_000_000;
     pub const RUN_FREQ_HZ: u32 = 20_000_000;
 
-    pub type Spi = <BoardType as Board>::ImuSpi;
+    pub type Spi = <ActiveBoard as Board>::ImuSpi;
     pub type Raw = SelectedImuDriver<Spi>;
     pub type Calibrated = CalibratedImu<Raw>;
 }
 
 pub mod frame {
+
+    use crate::boards::ActuatorProvider;
+
     use super::*;
 
-    pub type Pwm = <BoardType as Board>::PwmPin;
-    pub type Concrete = ActiveFrame<Pwm>;
+    pub type ServoPin = <ActiveBoard as ActuatorProvider>::ServoPin;
+    pub type MotorPin = <ActiveBoard as ActuatorProvider>::MotorPin;
+    pub type Concrete = ActiveFrame<ServoPin, MotorPin>;
 }
 
 pub mod receiver {

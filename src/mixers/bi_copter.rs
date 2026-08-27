@@ -66,4 +66,8 @@ impl BiCopMixer {
             motor_right,
         }
     }
+
+    pub fn get_idle_throttle(&self) -> f32 {
+        self.idle_throttle
+    }
 }
