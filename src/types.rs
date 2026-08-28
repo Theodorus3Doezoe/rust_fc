@@ -16,21 +16,6 @@ pub struct ImuBurst {
     pub gyro: Rates,
 }
 
-pub struct PwmChannels<P> {
-    pub pwm1: P,
-    pub pwm2: P,
-    pub pwm3: P,
-    pub pwm4: P,
-}
-
-#[derive(Clone, Copy, defmt::Format)]
-pub struct ActuatorOutput {
-    pub servo_left_us: u16,
-    pub servo_right_us: u16,
-    pub motor_left: f32,
-    pub motor_right: f32,
-}
-
 use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ToUsb {

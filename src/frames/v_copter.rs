@@ -21,6 +21,8 @@ pub struct VCopterFrame<P, M> {
 pub struct ActuatorOutput {
     pub servo_left_us: u16,
     pub servo_right_us: u16,
+    pub ml_raw_to_dshot: u16,
+    pub mr_raw_to_dshot: u16,
     pub motor_left_throttle: u16,
     pub motor_right_throttle: u16,
 }
@@ -85,6 +87,8 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let info = ActuatorOutput {
             servo_left_us,
             servo_right_us,
+            ml_raw_to_dshot: left,
+            mr_raw_to_dshot: right,
             motor_left_throttle,
             motor_right_throttle,
         };
@@ -99,30 +103,24 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
     fn stop_all(&mut self) {
         let _ = self.servo_left.set_duty(0.0);
         let _ = self.servo_right.set_duty(0.0);
-
-        // disable motors to 0%
-    }
-
-    async fn arm_motor(&mut self) {
-        let idle_throttle = self.mixer.get_idle_throttle();
-        let idle_dshot = mixer_to_dshot_throttle(idle_throttle);
-        self.motor_left.apply(0);
-        self.motor_right.apply(0);
-        Timer::after(Duration::from_millis(300)).await;
-        // send idle throttle
-        self.motor_left.apply(idle_dshot);
-        self.motor_right.apply(idle_dshot);
-        Timer::after(Duration::from_millis(500)).await;
-        self.motor_left.apply(0);
-        self.motor_right.apply(0);
-        Timer::after(Duration::from_millis(300)).await;
-        todo!()
-    }
-
-    async fn disarm(&mut self) {
         self.motor_left.apply(0);
         self.motor_right.apply(0);
     }
+
+    // async fn arm_motor(&mut self) {
+    //     let idle_throttle = self.mixer.get_idle_throttle();
+    //     let idle_dshot = mixer_to_dshot_throttle(idle_throttle);
+    //     self.motor_left.apply(0);
+    //     self.motor_right.apply(0);
+    //     Timer::after(Duration::from_millis(300)).await;
+    //     // send idle throttle
+    //     self.motor_left.apply(idle_dshot);
+    //     self.motor_right.apply(idle_dshot);
+    //     Timer::after(Duration::from_millis(500)).await;
+    //     self.motor_left.apply(0);
+    //     self.motor_right.apply(0);
+    //     Timer::after(Duration::from_millis(300)).await;
+    // }
 
     async fn set_direction(&mut self, permanent: bool) {
         let cmd_left = if self.motor_left.cw { 7 } else { 8 };

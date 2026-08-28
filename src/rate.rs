@@ -57,11 +57,11 @@ pub async fn rate_task(
     let mut rate_pids =
         RatePID::new(pid_conf_roll, pid_conf_pitch, pid_conf_yaw).expect("Pid config invalid");
 
-    let mut counter: u16 = 0;
+    let mut counter = 0.0;
     let mut total_duration_nanos: u64 = 0;
 
-    let times_a_sec = 5;
-    let print_after_ticks = RATE_FREQ_HZ / times_a_sec;
+    let times_a_sec = 0.5;
+    let print_after_ticks = RATE_FREQ_HZ as f32 / times_a_sec;
 
     loop {
         ticker.next().await;
@@ -99,7 +99,7 @@ pub async fn rate_task(
             }
             State::Disarmed | State::Init => {
                 rate_pids.reset();
-                // frame.stop_all();
+                frame.stop_all();
             }
             State::Failsafe => {
                 rate_pids.reset();
@@ -115,9 +115,9 @@ pub async fn rate_task(
 
         total_duration_nanos += start.elapsed().as_nanos();
 
-        counter += 1;
+        counter += 1.0;
         if counter >= print_after_ticks {
-            counter = 0;
+            counter = 0.0;
             let avg_nanos = total_duration_nanos / print_after_ticks as u64;
             let avg_us = avg_nanos / 1000;
             let avg_frac = (avg_nanos % 1000) / 100;
@@ -134,11 +134,17 @@ pub async fn rate_task(
                         pid
                     );
                     defmt::info!(
-                        "[ACT] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
+                        "[ACT] Mix: [SL: {}, SR: {}], [ML_raw: {}, MR_Raw: {}, [ML: {}, MR: {}] -> Servos: [L: {}µs, R: {}µs] -> Motors: [L: {}, R:{}]",
                         out.mixer.servo_left,
                         out.mixer.servo_right,
+                        out.actuators.ml_raw_to_dshot,
+                        out.actuators.mr_raw_to_dshot,
+                        out.mixer.motor_left,
+                        out.mixer.motor_right,
                         out.actuators.servo_left_us,
-                        out.actuators.servo_right_us
+                        out.actuators.servo_right_us,
+                        out.actuators.motor_left_throttle,
+                        out.actuators.motor_right_throttle,
                     );
                 }
                 None => {

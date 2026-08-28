@@ -2,7 +2,7 @@ use crate::actuators;
 use crate::actuators::DshotChannel::MotorChannel;
 use crate::state::State;
 
-use super::{ActuatorProvider, Board, PwmChannels};
+use super::{ActuatorProvider, Board};
 
 use embassy_rp::dma::InterruptHandler as DmaInterruptHandler;
 use embassy_rp::gpio::{Level, Output};

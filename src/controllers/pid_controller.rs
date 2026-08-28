@@ -73,7 +73,3 @@ impl PidController {
         (p + self.i_term + d).clamp(-self.output_limit, self.output_limit)
     }
 }
-
-// TODO
-// Derivitave on measurment
-//

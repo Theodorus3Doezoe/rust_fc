@@ -32,12 +32,12 @@ pub async fn attitude_task(
     let roll_controller = AngleController::new(roll_kp, MAX_TILT_RATE);
     let pitch_controller = AngleController::new(pitch_kp, MAX_TILT_RATE);
 
-    let mut counter: u16 = 0;
+    let mut counter = 0.0;
 
     let mut total_duration_nanos: u64 = 0;
 
-    let times_a_sec = 5;
-    let print_after_ticks = ATTITUDE_FREQ_HZ / times_a_sec;
+    let times_a_sec = 0.5;
+    let print_after_ticks = ATTITUDE_FREQ_HZ as f32 / times_a_sec;
 
     loop {
         ticker.next().await;
@@ -106,9 +106,9 @@ pub async fn attitude_task(
 
         total_duration_nanos += start.elapsed().as_nanos();
 
-        counter += 1;
+        counter += 1.0;
         if counter >= print_after_ticks {
-            counter = 0;
+            counter = 0.0;
             let avg_nanos = total_duration_nanos / print_after_ticks as u64;
             let avg_us = avg_nanos / 1000;
             let avg_frac = (avg_nanos % 1000) / 100;
