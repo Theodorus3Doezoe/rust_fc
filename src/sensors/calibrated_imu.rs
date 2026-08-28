@@ -39,13 +39,13 @@ impl<I> CalibratedImu<I> {
             sum_x += gyro.roll;
             sum_y += gyro.pitch;
             sum_z += gyro.yaw;
-
-            if i.is_multiple_of(50) {
-                defmt::info!("Gyro read count: {} value: {}", i, gyro);
-            }
+            //
+            // if i.is_multiple_of(50) {
+            //     defmt::info!("Gyro read count: {} value: {}", i, gyro);
+            // }
             embassy_time::Timer::after_micros(1000).await;
         }
-        defmt::info!("sum_x: {}. sum_y: {}, sum_z: {}", sum_x, sum_y, sum_z);
+        // defmt::info!("sum_x: {}. sum_y: {}, sum_z: {}", sum_x, sum_y, sum_z);
 
         self.gyro_offset = Vec3 {
             x: sum_x / SAMPLES as f32,

@@ -60,7 +60,7 @@ pub async fn rate_task(
     let mut counter: u16 = 0;
     let mut total_duration_nanos: u64 = 0;
 
-    let times_a_sec = 2;
+    let times_a_sec = 5;
     let print_after_ticks = RATE_FREQ_HZ / times_a_sec;
 
     loop {
@@ -123,34 +123,34 @@ pub async fn rate_task(
             let avg_frac = (avg_nanos % 1000) / 100;
             total_duration_nanos = 0;
 
-            // match telemetry {
-            //     Some((sp, pid, out)) => {
-            //         defmt::info!(
-            //             "[RATE {}.{}µs] [ARMED] Burst: {:?} | Set: {:?} | PID: {:?}",
-            //             avg_us,
-            //             avg_frac,
-            //             burst,
-            //             sp,
-            //             pid
-            //         );
-            //         defmt::info!(
-            //             "[ACT] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
-            //             out.mixer.servo_left,
-            //             out.mixer.servo_right,
-            //             out.actuators.servo_left_us,
-            //             out.actuators.servo_right_us
-            //         );
-            //     }
-            //     None => {
-            //         defmt::info!(
-            //             "[RATE {}.{}µs] [STATE: {:?}] ArmBlocks: {:?}",
-            //             avg_us,
-            //             avg_frac,
-            //             SYSTEM.get_state(),
-            //             defmt::Debug2Format(&SYSTEM.get_arm_errors())
-            //         );
-            //     }
-            // }
+            match telemetry {
+                Some((sp, pid, out)) => {
+                    defmt::info!(
+                        "[RATE {}.{}µs] [ARMED] Burst: {:?} | Set: {:?} | PID: {:?}",
+                        avg_us,
+                        avg_frac,
+                        burst,
+                        sp,
+                        pid
+                    );
+                    defmt::info!(
+                        "[ACT] Mix: [SL: {}, SR: {}] -> Servos: [L: {}µs, R: {}µs]",
+                        out.mixer.servo_left,
+                        out.mixer.servo_right,
+                        out.actuators.servo_left_us,
+                        out.actuators.servo_right_us
+                    );
+                }
+                None => {
+                    defmt::info!(
+                        "[RATE {}.{}µs] [STATE: {:?}] ArmBlocks: {:?}",
+                        avg_us,
+                        avg_frac,
+                        SYSTEM.get_state(),
+                        defmt::Debug2Format(&SYSTEM.get_arm_errors())
+                    );
+                }
+            }
         }
     }
 }

@@ -21,7 +21,7 @@ use embassy_rp::usb::{Driver as RpUsbDriver, InterruptHandler as UsbInterruptHan
 use embassy_rp::{Peri, Peripherals, bind_interrupts};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use fixed::traits::ToFixed;
-use heapless::Vec;
+use heapless::Deque;
 
 bind_interrupts!(struct Irqs {
     DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>,
@@ -119,10 +119,10 @@ pub struct Rp2350Dev {
     imu_spi: Option<ImuConcrete>,
     // pwm_channels: Option<PwmChannels<PwmPinConcrete>>,
     usb_driver: Option<RpUsbDriver<'static, USB>>,
-    available_slices: Vec<ServoSlice, 2>,
+    available_slices: Deque<ServoSlice, 2>,
     pending_servo: Option<PwmPinConcrete>,
-    available_motors: Vec<MotorPins, 4>,
-    available_sm: Vec<MotorSm, 4>,
+    available_motors: Deque<MotorPins, 4>,
+    available_sm: Deque<MotorSm, 4>,
     pio_common: Common<'static, PIO0>,
 }
 
@@ -141,6 +141,7 @@ macro_rules! init_any_slice {
 
 impl ServoSlice {
     pub fn init(self, conf: PwmConf) -> (PwmPinConcrete, PwmPinConcrete) {
+        defmt::info!("Initializing servo slices with macro");
         init_any_slice!(self, conf, Slice1, Slice2)
     }
     // every pin and slice is a different type thats why these generics are neccesary
@@ -158,9 +159,9 @@ impl ServoSlice {
         let pwm_slice = Pwm::new_output_ab(slice, pin_a, pin_b, conf);
 
         let (Some(pin_a), Some(pin_b)) = pwm_slice.split() else {
-            panic!();
+            panic!("Can't split servo slices");
         };
-
+        defmt::info!("[init_slice] : Returning pin a & b");
         (pin_a, pin_b)
     }
 }
@@ -201,6 +202,7 @@ impl ActuatorProvider for Rp2350Dev {
         pwm_conf.top = 39_999;
         pwm_conf.compare_a = 15_000;
         pwm_conf.compare_b = 15_000;
+        pwm_conf.enable = true;
 
         // check pending_servo
         if let Some(servo) = self.pending_servo.take() {
@@ -209,10 +211,12 @@ impl ActuatorProvider for Rp2350Dev {
         }
 
         // take available_slices, slice them up, return a and put b in pending
-        let next_slice = self.available_slices.pop()?;
+        let next_slice = self.available_slices.pop_front()?;
+        defmt::info!("Popped servo slice from available_slices");
 
         let (servo_a, servo_b) = next_slice.init(pwm_conf);
 
+        defmt::info!("Returning servo pins");
         self.pending_servo = Some(servo_b);
         Some(servo_a)
     }
@@ -231,7 +235,10 @@ impl ActuatorProvider for Rp2350Dev {
         let target_hz = dshot_speed * 10;
         let clock = embassy_rp::pio_programs::clock_divider::calculate_pio_clock_divider(target_hz);
 
-        let next_motor_pin = self.available_motors.pop().expect("Couldn't pop motor pin");
+        let next_motor_pin = self
+            .available_motors
+            .pop_front()
+            .expect("Couldn't pop motor pin");
         let pin_dshot = next_motor_pin.into_pio(&mut self.pio_common);
 
         let mut config = embassy_rp::pio::Config::default();
@@ -246,7 +253,7 @@ impl ActuatorProvider for Rp2350Dev {
         config.shift_out.direction = embassy_rp::pio::ShiftDirection::Left;
 
         // sm some fixen
-        let mut sm_variant = self.available_sm.pop()?;
+        let mut sm_variant = self.available_sm.pop_front()?;
         sm_variant.init(&config, &pin_dshot);
 
         Some(PioDshotChannel::new(sm_variant))
@@ -272,15 +279,15 @@ impl Board for Rp2350Dev {
 
         let imu_spi_device = ExclusiveDevice::new_no_delay(imu_spi, imu_cs).unwrap();
 
-        let mut available_slices = Vec::new();
+        let mut available_slices = Deque::new();
 
-        let _ = available_slices.push(ServoSlice::Slice1 {
+        let _ = available_slices.push_back(ServoSlice::Slice1 {
             slice: p.PWM_SLICE1,
             pin_a: p.PIN_2,
             pin_b: p.PIN_3,
         });
 
-        let _ = available_slices.push(ServoSlice::Slice2 {
+        let _ = available_slices.push_back(ServoSlice::Slice2 {
             slice: p.PWM_SLICE2,
             pin_a: p.PIN_4,
             pin_b: p.PIN_5,
@@ -288,15 +295,12 @@ impl Board for Rp2350Dev {
 
         // push pins for motors into vector
         // Later I could do something to make unused pins available
-        let mut available_motors = Vec::new();
+        let mut available_motors = Deque::new();
 
-        let _ = available_motors.push(MotorPins::Pin6(p.PIN_6));
-        let _ = available_motors.push(MotorPins::Pin7(p.PIN_7));
-        let _ = available_motors.push(MotorPins::Pin8(p.PIN_8));
-        let _ = available_motors.push(MotorPins::Pin9(p.PIN_9));
-        // let _ = available_motors.push(p.PIN_7);
-        // let _ = available_motors.push(p.PIN_8);
-        // let _ = available_motors.push(p.PIN_9);
+        let _ = available_motors.push_back(MotorPins::Pin6(p.PIN_6));
+        let _ = available_motors.push_back(MotorPins::Pin7(p.PIN_7));
+        let _ = available_motors.push_back(MotorPins::Pin8(p.PIN_8));
+        let _ = available_motors.push_back(MotorPins::Pin9(p.PIN_9));
 
         let Pio {
             common,
@@ -308,11 +312,11 @@ impl Board for Rp2350Dev {
         } = Pio::new(p.PIO0, Irqs);
 
         // push created pio state machines into pio
-        let mut available_sm = Vec::new();
-        available_sm.push(MotorSm::Sm0(sm0));
-        available_sm.push(MotorSm::Sm1(sm1));
-        available_sm.push(MotorSm::Sm2(sm2));
-        available_sm.push(MotorSm::Sm3(sm3));
+        let mut available_sm = Deque::new();
+        available_sm.push_back(MotorSm::Sm0(sm0));
+        available_sm.push_back(MotorSm::Sm1(sm1));
+        available_sm.push_back(MotorSm::Sm2(sm2));
+        available_sm.push_back(MotorSm::Sm3(sm3));
 
         let usb_driver = RpUsbDriver::new(p.USB, Irqs);
 

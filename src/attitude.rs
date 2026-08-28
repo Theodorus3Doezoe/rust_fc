@@ -36,7 +36,7 @@ pub async fn attitude_task(
 
     let mut total_duration_nanos: u64 = 0;
 
-    let times_a_sec = 2;
+    let times_a_sec = 5;
     let print_after_ticks = ATTITUDE_FREQ_HZ / times_a_sec;
 
     loop {
@@ -116,18 +116,18 @@ pub async fn attitude_task(
 
             let rest = vqf.is_rest();
 
-            // defmt::info!(
-            //     "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
-            //     avg_us,
-            //     avg_frac,
-            //     roll.to_degrees(),
-            //     pitch.to_degrees(),
-            //     yaw.to_degrees(),
-            //     set_rates.roll.to_degrees(),
-            //     set_rates.pitch.to_degrees(),
-            //     set_rates.yaw.to_degrees(),
-            //     rest
-            // );
+            defmt::info!(
+                "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
+                avg_us,
+                avg_frac,
+                roll.to_degrees(),
+                pitch.to_degrees(),
+                yaw.to_degrees(),
+                set_rates.roll.to_degrees(),
+                set_rates.pitch.to_degrees(),
+                set_rates.yaw.to_degrees(),
+                rest
+            );
         }
     }
 }

@@ -53,6 +53,7 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
             .take_motor()
             .expect("Frame: Could not take right servo pin from board");
 
+        defmt::info!("[Frame] : Succesfully initialised Actuators");
         Self {
             servo_left: ServoController::new(left_servo_pin, 0.0, false, SERVO_FREQ_HZ),
             servo_right: ServoController::new(right_servo_pin, 0.0, false, SERVO_FREQ_HZ),
@@ -81,15 +82,17 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         self.motor_left.apply(motor_left_throttle);
         self.motor_right.apply(motor_right_throttle);
 
+        let info = ActuatorOutput {
+            servo_left_us,
+            servo_right_us,
+            motor_left_throttle,
+            motor_right_throttle,
+        };
+
         //for telemetry
         FrameOutput {
             mixer: mixer_out,
-            actuators: ActuatorOutput {
-                servo_left_us,
-                servo_right_us,
-                motor_left_throttle,
-                motor_right_throttle,
-            },
+            actuators: info,
         }
     }
 

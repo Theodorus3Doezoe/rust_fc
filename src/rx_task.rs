@@ -48,7 +48,7 @@ pub async fn receiver_task(
                 SYSTEM.set_state(State::Disarmed);
             }
             Err(e) => {
-                defmt::warn!("RX Timeout error: {:?}", e);
+                // defmt::warn!("RX Timeout error: {:?}", e);
                 SYSTEM.add_system_error(SystemErrorFlags::RX_LOST);
                 SYSTEM.set_state(State::Disarmed);
             }

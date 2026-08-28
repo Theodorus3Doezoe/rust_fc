@@ -22,7 +22,7 @@ where
         }
     }
 
-    // later pio option?
+    // Give result back with ?
     pub fn set_duty(&mut self, mut mixer_input: f32) -> u16 {
         if self.inverse {
             mixer_input = -mixer_input;
@@ -32,9 +32,9 @@ where
         pulse_us = pulse_us.clamp(1000.0, 2000.0);
         let pulse_u16 = (pulse_us + 0.5) as u16;
 
-        let _ = self
-            .pwm_channel
-            .set_duty_cycle_fraction(pulse_us as u16, self.period_us as u16);
+        self.pwm_channel
+            .set_duty_cycle_fraction(pulse_us as u16, self.period_us as u16)
+            .expect("[ServoController] : Failed to set Duty Cycle");
 
         pulse_u16
     }
