@@ -26,7 +26,7 @@ pub async fn rate_task(
     // implement helper for gains
     let pid_conf_roll = PidConfig {
         kp: 0.15,
-        ki: 0.05,
+        ki: 0.00,
         kd: 0.005,
         i_limit: 30.0,
         dterm_cutoff_lpf1_hz: 150.0,
@@ -36,7 +36,7 @@ pub async fn rate_task(
 
     let pid_conf_pitch = PidConfig {
         kp: 0.15,
-        ki: 0.05,
+        ki: 0.00,
         kd: 0.005,
         i_limit: 30.0,
         dterm_cutoff_lpf1_hz: 150.0,
@@ -46,7 +46,7 @@ pub async fn rate_task(
 
     let pid_conf_yaw = PidConfig {
         kp: 0.25,
-        ki: 0.10,
+        ki: 0.0,
         kd: 0.0,
         i_limit: 30.0,
         dterm_cutoff_lpf1_hz: 150.0,

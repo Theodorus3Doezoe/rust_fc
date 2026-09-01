@@ -62,14 +62,27 @@ impl PidController {
 
         let p = self.config.kp * error;
 
-        self.i_term += self.config.ki * error * dt;
-        self.i_term = self.i_term.clamp(-self.config.i_limit, self.config.i_limit);
-
         let gyro = gyro_measurement - self.prev_measurement;
         let raw_d = gyro / dt;
         let d = -self.config.kd * self.dterm_filter.apply(raw_d);
         self.prev_measurement = gyro_measurement;
 
-        (p + self.i_term + d).clamp(-self.output_limit, self.output_limit)
+        let i_step = self.config.ki * error * dt;
+        let potential_i = self.i_term + i_step;
+
+        let raw = p + potential_i + d;
+        let output = raw.clamp(-self.output_limit, self.output_limit);
+
+        let saturated_high = raw >= self.output_limit;
+        let saturated_low = raw <= -self.output_limit;
+
+        if (!saturated_high && !saturated_low)
+            || (saturated_high && error < 0.0)
+            || (saturated_low && error > 0.0)
+        {
+            self.i_term = potential_i.clamp(-self.config.i_limit, self.config.i_limit);
+        }
+
+        output
     }
 }

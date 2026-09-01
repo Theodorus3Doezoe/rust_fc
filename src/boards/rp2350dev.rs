@@ -225,9 +225,17 @@ impl ActuatorProvider for Rp2350Dev {
         let pio_program = pio_asm!(
             ".side_set 1 opt",
             ".wrap_target",
+            "pull",
+            "set y, 15",
+            "bitloop:",
             "nop side 1 [2]",
             "out pins, 1 [3]",
             "nop side 0 [2]",
+            "jmp y-- bitloop",
+            "set x, 24",
+            "gap:",
+            "nop side 0 [7]",
+            "jmp x-- gap",
             ".wrap",
         );
 
@@ -248,7 +256,7 @@ impl ActuatorProvider for Rp2350Dev {
 
         config.set_out_pins(&[&pin_dshot]);
         config.clock_divider = clock;
-        config.shift_out.auto_fill = true;
+        // config.shift_out.auto_fill = true;
         config.shift_out.threshold = 16;
         config.shift_out.direction = embassy_rp::pio::ShiftDirection::Left;
 

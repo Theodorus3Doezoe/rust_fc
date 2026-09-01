@@ -50,7 +50,7 @@ impl BiCopMixer {
             motor_right -= motor_max - 1.0;
         }
 
-        let m_min = motor_left.max(motor_right);
+        let m_min = motor_left.min(motor_right);
         if m_min < self.idle_throttle {
             motor_left += self.idle_throttle - m_min;
             motor_right += self.idle_throttle - m_min;
