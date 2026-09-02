@@ -6,20 +6,16 @@ use crate::{
     config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
     controllers::p_controller::AngleController,
     filters::vqf,
-    state::SetPointRate,
+    state::{ArmBlockFlags, FlightMode, SYSTEM},
+    sync::{AtomicRates, ImuConsumer},
     types::{ImuBurst, Rates, Vec3},
 };
 
-struct TempSetpoint {
-    roll: f32,
-    pitch: f32,
-    yaw: f32,
-}
-
 #[embassy_executor::task]
 pub async fn attitude_task(
-    mut consumer: heapless::spsc::Consumer<'static, ImuBurst>,
-    setpoints: &'static SetPointRate,
+    mut consumer: ImuConsumer,
+    pilot_input: &'static AtomicRates,
+    rate_setpoints: &'static AtomicRates,
 ) {
     const MAX_YAW_RATE: f32 = f32::to_radians(180.0);
     const MAX_TILT_RATE: f32 = f32::to_radians(180.0);
@@ -36,23 +32,16 @@ pub async fn attitude_task(
     let roll_controller = AngleController::new(roll_kp, MAX_TILT_RATE);
     let pitch_controller = AngleController::new(pitch_kp, MAX_TILT_RATE);
 
-    // this has to be clamped with max input and normalised to -1.0 and +1.0 from controller input
-    let setpoint = TempSetpoint {
-        roll: 0.0,
-        pitch: 0.0,
-        yaw: 0.0,
-    };
-
-    let mut counter: u16 = 0;
+    let mut counter = 0.0;
 
     let mut total_duration_nanos: u64 = 0;
 
-    let times_a_sec = 2;
-    let print_after_ticks = ATTITUDE_FREQ_HZ / times_a_sec;
+    let times_a_sec = 0.5;
+    let print_after_ticks = ATTITUDE_FREQ_HZ as f32 / times_a_sec;
 
     loop {
         ticker.next().await;
-        // let start = Instant::now();
+        let start = Instant::now();
 
         let mut count = 0u32;
         let mut sum_gyro = Rates::default();
@@ -93,33 +82,44 @@ pub async fn attitude_task(
 
         let (roll, pitch, yaw) = orientation.euler_angles();
 
-        let set_rates = crate::types::Rates {
-            roll: roll_controller.update(setpoint.roll, roll),
-            pitch: pitch_controller.update(setpoint.pitch, pitch),
-            yaw: setpoint.yaw * MAX_YAW_RATE,
-        };
+        // remove magic numbers
+        if !SYSTEM.is_armed() {
+            let max_tilt_rad = 25.0_f32.to_radians();
+            if roll.abs() > max_tilt_rad || pitch.abs() > max_tilt_rad {
+                SYSTEM.add_arm_error(ArmBlockFlags::TOO_TILTED);
+            } else {
+                SYSTEM.clear_arm_error(ArmBlockFlags::TOO_TILTED);
+            }
+        }
 
-        setpoints.set(set_rates);
+        let mut set_rates = pilot_input.get();
 
-        // total_duration_nanos += start.elapsed().as_nanos();
+        if SYSTEM.get_flight_mode() == FlightMode::Angle {
+            set_rates = Rates {
+                roll: roll_controller.update(pilot_input.roll.get(), roll),
+                pitch: pitch_controller.update(pilot_input.pitch.get(), pitch),
+                yaw: pilot_input.yaw.get() * MAX_YAW_RATE,
+            };
+        }
 
-        counter += 1;
+        rate_setpoints.set(set_rates);
+
+        total_duration_nanos += start.elapsed().as_nanos();
+
+        counter += 1.0;
         if counter >= print_after_ticks {
-            counter = 0;
-            // let avg_nanos = total_duration_nanos / 2000;
-            // let avg_micros = avg_nanos / 1000;
-            // let avg_micros_fraction = (avg_nanos % 1000) / 100;
+            counter = 0.0;
+            let avg_nanos = total_duration_nanos / print_after_ticks as u64;
+            let avg_us = avg_nanos / 1000;
+            let avg_frac = (avg_nanos % 1000) / 100;
+            total_duration_nanos = 0;
 
             let rest = vqf.is_rest();
-            //
-            // defmt::info!(
-            //     "ATTITUDE: Average read time: {}.{} µs (Budget: 1000 µs) ",
-            //     avg_micros,
-            //     avg_micros_fraction,
-            // );
 
             defmt::info!(
-                "Att: [R: {}°, P: {}°, Y: {}°] | RateCmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
+                "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
+                avg_us,
+                avg_frac,
                 roll.to_degrees(),
                 pitch.to_degrees(),
                 yaw.to_degrees(),
@@ -128,8 +128,6 @@ pub async fn attitude_task(
                 set_rates.yaw.to_degrees(),
                 rest
             );
-
-            // total_duration_nanos = 0;
         }
     }
 }

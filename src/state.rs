@@ -1,33 +1,142 @@
-use crate::types::{Rates, Vec3};
+use bitflags::bitflags;
+use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
+use defmt::info;
+use serde::{Deserialize, Serialize};
 
-use core::sync::atomic::{AtomicU32, Ordering};
+pub static SYSTEM: SystemState = SystemState::new();
 
-pub struct SetPointRate {
-    roll: AtomicU32,
-    pitch: AtomicU32,
-    yaw: AtomicU32,
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, )]
+    pub struct ArmBlockFlags: u16 {
+        const THROTTLE_NOT_ZERO = 1 << 0;
+        const TOO_TILTED        = 1 << 1;
+        const CALIBRATING       = 1 << 2;
+        const NO_RX             = 1 << 3;
+    }
+
+
+}
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct SystemErrorFlags: u16 {
+        const RX_LOST = 1 << 0;
+        const BAT_CRITICAL = 1 << 1;
+        const IMU_FAILURE = 1 << 2;
+        const SERVO_FAILURE = 1 << 3;
+    }
 }
 
-impl SetPointRate {
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, defmt::Format)]
+pub enum State {
+    Init = 0,
+    Disarmed = 1,
+    Armed = 2,
+    Failsafe = 3,
+}
+
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, defmt::Format)]
+pub enum FailsafeAction {
+    None = 0,
+    Land = 1,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, defmt::Format, PartialEq, Eq)]
+pub enum FlightMode {
+    Angle = 0,
+    Rate = 1,
+}
+
+pub struct SystemState {
+    system_state: AtomicU8,
+    flight_mode: AtomicU8,
+    arm_errors: AtomicU16,
+    system_errors: AtomicU16,
+    failsafe: AtomicU16,
+}
+
+impl SystemState {
     pub const fn new() -> Self {
         Self {
-            roll: AtomicU32::new(0),
-            pitch: AtomicU32::new(0),
-            yaw: AtomicU32::new(0),
+            system_state: AtomicU8::new(State::Init as u8),
+            flight_mode: AtomicU8::new(FlightMode::Angle as u8),
+            arm_errors: AtomicU16::new(ArmBlockFlags::CALIBRATING.bits()),
+            system_errors: AtomicU16::new(0),
+            failsafe: AtomicU16::new(FailsafeAction::None as u16),
+        }
+    }
+    pub fn set_state(&self, state: State) {
+        self.system_state.store(state as u8, Ordering::Relaxed);
+    }
+
+    pub fn get_state(&self) -> State {
+        match self.system_state.load(Ordering::Relaxed) {
+            0 => State::Init,
+            1 => State::Disarmed,
+            2 => State::Armed,
+            3 => State::Failsafe,
+            _ => State::Failsafe,
         }
     }
 
-    pub fn set(&self, axes: Rates) {
-        self.roll.store(axes.roll.to_bits(), Ordering::Relaxed);
-        self.pitch.store(axes.pitch.to_bits(), Ordering::Relaxed);
-        self.yaw.store(axes.yaw.to_bits(), Ordering::Relaxed);
+    pub fn get_flight_mode(&self) -> FlightMode {
+        match self.flight_mode.load(Ordering::Relaxed) {
+            0 => FlightMode::Angle,
+            1 => FlightMode::Rate,
+            _ => FlightMode::Angle,
+        }
     }
 
-    pub fn get(&self) -> Rates {
-        Rates {
-            roll: f32::from_bits(self.roll.load(Ordering::Relaxed)),
-            pitch: f32::from_bits(self.pitch.load(Ordering::Relaxed)),
-            yaw: f32::from_bits(self.yaw.load(Ordering::Relaxed)),
+    pub fn set_flight_mode(&self, mode: FlightMode) {
+        self.flight_mode.store(mode as u8, Ordering::Relaxed);
+    }
+
+    pub fn set_failsafe(&self, state: FailsafeAction) {
+        self.failsafe.store(state as u16, Ordering::Relaxed);
+    }
+
+    pub fn get_failsafe(&self) -> FailsafeAction {
+        match self.failsafe.load(Ordering::Relaxed) {
+            0 => FailsafeAction::None,
+            1 => FailsafeAction::Land,
+            _ => FailsafeAction::Land,
         }
+    }
+
+    pub fn add_arm_error(&self, flag: ArmBlockFlags) {
+        self.arm_errors.fetch_or(flag.bits(), Ordering::Relaxed);
+    }
+
+    pub fn clear_arm_error(&self, flag: ArmBlockFlags) {
+        self.arm_errors.fetch_and(!flag.bits(), Ordering::Relaxed);
+    }
+
+    pub fn get_arm_errors(&self) -> ArmBlockFlags {
+        let raw = self.arm_errors.load(Ordering::Relaxed);
+        ArmBlockFlags::from_bits_truncate(raw)
+    }
+
+    pub fn add_system_error(&self, flag: SystemErrorFlags) {
+        self.system_errors.fetch_or(flag.bits(), Ordering::Relaxed);
+    }
+
+    pub fn clear_system_error(&self, flag: SystemErrorFlags) {
+        self.system_errors
+            .fetch_and(!flag.bits(), Ordering::Relaxed);
+    }
+
+    pub fn get_system_errors(&self) -> SystemErrorFlags {
+        let raw = self.system_errors.load(Ordering::Relaxed);
+        SystemErrorFlags::from_bits_truncate(raw)
+    }
+
+    pub fn is_armed(&self) -> bool {
+        self.get_state() == State::Armed
+    }
+
+    pub fn can_arm(&self) -> bool {
+        self.get_arm_errors().is_empty() && self.get_system_errors().is_empty()
     }
 }
