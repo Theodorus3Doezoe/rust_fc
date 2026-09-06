@@ -1,8 +1,9 @@
-pub use crate::boards::{Board, rp2350dev::Rp2350Dev};
+// pub use crate::boards::{Board, rp2350dev::Rp2350Dev};
+pub use crate::boards::*;
 pub use crate::frames::{Frame, v_copter::VCopterFrame};
 pub use crate::sensors::{Imu, mpu6500::Mpu6500};
 
-pub type ActiveBoard = Rp2350Dev;
+pub type ActiveBoard = rp2350::Rp2350Dev;
 pub type SelectedImuDriver<SPI> = Mpu6500<SPI>;
 pub type ActiveFrame<P, M> = VCopterFrame<P, M>;
 // pub type ActiveTelemetry = usb::UsbTx;
