@@ -33,9 +33,13 @@ class FlightStickState:
 class XboxControllerReader:
     """Reads input from Linux /dev/input/js* or evdev, with fallback simulation mode."""
 
-    def __init__(self, device_path: Optional[str] = None, sim: bool = False):
+    def __init__(self, device_path: Optional[str] = None, sim: bool = False,
+                 deadzone: float = 0.05):
         self.device_path = device_path
         self.sim = sim
+        # Joystick-deadzone (stick-assen onder deze absolute waarde -> 0.0).
+        # Instelbaar via TUI (--deadzone / '['- en ']'-toetsen).
+        self.deadzone = max(0.0, min(0.50, float(deadzone)))
         self.state = FlightStickState()
         self.running = False
         self._thread: Optional[threading.Thread] = None
@@ -191,8 +195,8 @@ class XboxControllerReader:
 
                         pitch_raw = -ly / 32767.0
                         roll_raw = rx / 32767.0
-                        self.state.pitch = max(-1.0, min(1.0, round(pitch_raw if abs(pitch_raw) > 0.05 else 0.0, 3)))
-                        self.state.roll = max(-1.0, min(1.0, round(roll_raw if abs(roll_raw) > 0.05 else 0.0, 3)))
+                        self.state.pitch = max(-1.0, min(1.0, round(pitch_raw if abs(pitch_raw) > self.deadzone else 0.0, 3)))
+                        self.state.roll = max(-1.0, min(1.0, round(roll_raw if abs(roll_raw) > self.deadzone else 0.0, 3)))
 
                         self._lt_raw = lt / 1023.0
                         self._rt_raw = rt / 1023.0
@@ -287,12 +291,12 @@ class XboxControllerReader:
                         # Axis 1: Left Stick Y (Pitch: forward is negative in JS API, invert so forward is +1.0)
                         if num == 1:
                             # Apply small deadzone
-                            clean_val = -norm_val if abs(norm_val) > 0.05 else 0.0
+                            clean_val = -norm_val if abs(norm_val) > self.deadzone else 0.0
                             self.state.pitch = max(-1.0, min(1.0, round(clean_val, 3)))
 
                         # Axis 3: Right Stick X (Roll: right is +1.0)
                         elif num == 3:
-                            clean_val = norm_val if abs(norm_val) > 0.05 else 0.0
+                            clean_val = norm_val if abs(norm_val) > self.deadzone else 0.0
                             self.state.roll = max(-1.0, min(1.0, round(clean_val, 3)))
 
                         # Axis 2: LT (Left Trigger: negative yaw)
