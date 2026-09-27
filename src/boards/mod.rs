@@ -3,7 +3,7 @@ use embassy_usb_driver::Driver;
 use embedded_hal::pwm::SetDutyCycle;
 use embedded_hal_async::spi::SpiDevice;
 
-pub mod rp2350dev;
+pub mod rp2350;
 
 pub trait ActuatorProvider {
     type ServoPin: SetDutyCycle;

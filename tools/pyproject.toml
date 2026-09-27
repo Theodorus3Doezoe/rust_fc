@@ -1,0 +1,12 @@
+[project]
+name = "rust-fc-tools"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+  "pyserial>=3.5",
+  "prompt-toolkit>=3.0",
+  "rich>=12.0",
+]
+
+[tool.uv]
+package = false

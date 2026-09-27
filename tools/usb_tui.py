@@ -68,9 +68,54 @@ class SerialInterface:
         self.cmd_arm_held = False
         self.cmd_disarm_held = False
         self.active_stick_state = None
+        # Generatie-teller: maakt overlappende holds ongevaarlijk (alleen de
+        # nieuwste hold/release-thread mag de hold-vlag aanpassen).
+        self._arm_hold_gen = 0
 
         # Callback for UI notification
         self.on_update_callback = None
+
+    def trigger_arm_hold(self, duration: float = 2.5):
+        """Houd het ARM-signaal `duration` seconden vast (toetsenbord-hold).
+
+        Eén druk op 'a' = vasthouden tot voorbij de 2-seconden FC-veiligheids-
+        timer, daarna automatische release (geen toggle die per ongeluk aan
+        blijft staan). De 100Hz RC-stream (zie _rc_tx_loop) verstuurt intussen
+        arm=true-pakketten. 2,5s (i.p.v. exact 2,0) voor USB/jitter-marge.
+        """
+        self._arm_hold_gen += 1
+        gen = self._arm_hold_gen
+        self.cmd_arm_held = True
+        self.log(f"[SYS] ARM hold gestart ({duration:.1f}s, dekt FC 2s-timer)...")
+
+        def _release():
+            time.sleep(duration)
+            # Alleen releasen als er intussen geen nieuwe hold/disarm kwam.
+            if gen == self._arm_hold_gen:
+                self.cmd_arm_held = False
+                self.log("[SYS] ARM hold afgelopen (auto-release).")
+                if self.on_update_callback:
+                    self.on_update_callback()
+
+        threading.Thread(target=_release, daemon=True).start()
+
+    def set_arm_hold(self, held: bool):
+        """ARM-hold direct aan (True) of uit (False); wist een lopende hold."""
+        self._arm_hold_gen += 1
+        self.cmd_arm_held = held
+        if self.on_update_callback:
+            self.on_update_callback()
+
+    def toggle_arm_hold(self):
+        """Toetsenbord-hold toggelen (aan/uit). Blijft aan tot 'a' opnieuw of
+        'd' (disarm). Veiligheid: de FC disarmt vanzelf bij wegvallende stream
+        (200ms RX-timeout in firmware) en 'd' wist de hold altijd."""
+        holding = not self.cmd_arm_held
+        self.set_arm_hold(holding)
+        if holding:
+            self.log("[SYS] ARM HOLD aan (nogmaals 'a' = uit, 'd' = disarm)...")
+        else:
+            self.log("[SYS] ARM hold uit.")
 
     def send_tune_pid(self, axis_name: str, kp: float, ki: float, kd: float) -> bool:
         axis_map = {"roll": 0, "pitch": 1, "yaw": 2}
@@ -166,8 +211,12 @@ class SerialInterface:
                 pitch = st.pitch
                 yaw = st.yaw
                 throttle = st.throttle
-                arm = st.arm_pressed
-                disarm = st.disarm_pressed
+                # Toetsenbord-hold TELT MEE naast de Xbox-knop (zonder deze
+                # `or` werd cmd_arm_held genegeerd zodra er stick-data is,
+                # waardoor 'a' schijnbaar niets deed en er geen
+                # ARM (HOLDING)-regels verschenen).
+                arm = st.arm_pressed or getattr(self, "cmd_arm_held", False)
+                disarm = st.disarm_pressed or getattr(self, "cmd_disarm_held", False)
             else:
                 roll = 0.0
                 pitch = 0.0
@@ -394,7 +443,7 @@ def list_ports():
         print(f"  - {p.device:<15} [{vid_pid}] {desc}")
 
 
-def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
+def run_tui(serial_if: SerialInterface, xbox_sim: bool = False, deadzone: float = 0.05):
     """Launch the interactive TUI using prompt_toolkit."""
 
     # UI State controls
@@ -406,7 +455,7 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
     log_control = FormattedTextControl()
 
     # Xbox Controller Handler
-    xbox_reader = xc.XboxControllerReader(sim=xbox_sim)
+    xbox_reader = xc.XboxControllerReader(sim=xbox_sim, deadzone=deadzone)
     xbox_reader.on_arm_callback = lambda: serial_if.send_cmd("arm")
     xbox_reader.on_disarm_callback = lambda: serial_if.send_cmd("disarm")
     xbox_reader.start()
@@ -634,10 +683,11 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
 
     def show_help():
         serial_if.log("Available Hotkeys & Commands:")
-        serial_if.log("  [a] / arm     - Send ARM command (Btn A on Xbox Controller)")
-        serial_if.log("  [d] / disarm  - Send DISARM command (Btn B on Xbox Controller)")
+        serial_if.log("  [a] / arm     - ARM HOLD aan/uit (toggle; 'd' = uit + disarm)")
+        serial_if.log("  [d] / disarm  - Send DISARM command + ARM-hold annuleren")
         serial_if.log("  [t] / tune    - Open Live PID & Filter Tuning Menu")
         serial_if.log("  [x]           - Toggle Xbox Controller Simulator mode")
+        serial_if.log("  [[] / []]     - Joystick deadzone -/+ 5% (bereik 1..50%)")
         serial_if.log("  [p] / device  - Open Device/Port selection menu")
         serial_if.log("  [h] / help    - Display this help message")
         serial_if.log("  [c] / clear   - Clear event log box")
@@ -645,6 +695,7 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
         serial_if.log("Xbox Mappings:")
         serial_if.log("  R-Stick X: Roll (-1..+1) | L-Stick Y: Pitch (-1..+1)")
         serial_if.log("  LT / RT  : Yaw (-1..+1)  | D-Pad UP/DN: Throttle (0..1)")
+        serial_if.log(f"  Deadzone: {xbox_reader.deadzone * 100:.0f}% (aanpassen met '[' en ']')")
         refresh_ui()
 
     # Keybindings
@@ -657,7 +708,12 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
     @kb.add("a")
     @kb.add("A")
     def _hotkey_arm(event):
-        serial_if.send_cmd("arm")
+        # Toggle-hold (geen getimede hold): blijft aan tot 'a' opnieuw of 'd'.
+        # Een getimede hold (2,5s) bleek in de praktijk te krap (opstart-latency
+        # eet de marge voor de 2s FC-timer op); toggelen werkt wel. Vangnetten:
+        # event-log toont continu "ARM (HOLDING)", 'd' wist altijd, en de FC
+        # disarmt vanzelf bij wegvallende RC-stream (200ms-timeout, firmware).
+        serial_if.toggle_arm_hold()
         refresh_ui()
 
     @kb.add("d")
@@ -665,6 +721,7 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
     @kb.add("b")
     @kb.add("B")
     def _hotkey_disarm(event):
+        serial_if.set_arm_hold(False)
         serial_if.log("🚨 DISARM TRIGGERED VIA HOTKEY!")
         serial_if.send_cmd("disarm")
         refresh_ui()
@@ -686,6 +743,18 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False):
             xbox_reader.state.connected = False
             xbox_reader.state.device_name = "Searching for Gamepad..."
             serial_if.log("[XBOX] Searching for physical Xbox Controller (/dev/input/js*)...")
+        refresh_ui()
+
+    @kb.add("[")
+    def _deadzone_down(event):
+        xbox_reader.deadzone = max(0.01, round(xbox_reader.deadzone - 0.05, 2))
+        serial_if.log(f"[XBOX] Deadzone -> {xbox_reader.deadzone * 100:.0f}%")
+        refresh_ui()
+
+    @kb.add("]")
+    def _deadzone_up(event):
+        xbox_reader.deadzone = min(0.50, round(xbox_reader.deadzone + 0.05, 2))
+        serial_if.log(f"[XBOX] Deadzone -> {xbox_reader.deadzone * 100:.0f}%")
         refresh_ui()
 
     @kb.add("p")
@@ -842,6 +911,12 @@ def main():
     parser.add_argument("-s", "--sim", action="store_true", help="Enable serial simulation mode")
     parser.add_argument("--xbox-sim", action="store_true", help="Enable Xbox Controller simulator mode")
     parser.add_argument("-l", "--list", action="store_true", help="List available serial ports and exit")
+    parser.add_argument(
+        "--deadzone",
+        type=float,
+        default=0.05,
+        help="Joystick deadzone 0.01..0.50 (default: 0.05). Live bij te stellen in TUI met '[' en ']'.",
+    )
     parser.add_argument("command", nargs="?", choices=["arm", "disarm", "status"], help="Optional single command to execute")
 
     args = parser.parse_args()
@@ -877,7 +952,8 @@ def main():
 
     # Interactive TUI mode
     ser_if = SerialInterface(port=args.port, baud=args.baud, sim=args.sim)
-    run_tui(ser_if, xbox_sim=args.xbox_sim)
+    deadzone = max(0.01, min(0.50, args.deadzone))
+    run_tui(ser_if, xbox_sim=args.xbox_sim, deadzone=deadzone)
 
 
 if __name__ == "__main__":
