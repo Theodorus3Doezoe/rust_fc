@@ -1,0 +1,49 @@
+.program bidir_dshot
+
+.wrap_target
+    set pindirs, 1
+    set pins, 1
+    pull block
+    set x, 15
+
+tx_bit:
+    out y, 1
+    jmp !y, tx_zero
+    set pins, 0 [27]
+    set pins, 1 [8]
+    jmp x--, tx_bit
+    jmp rx_phase
+
+tx_zero:
+    set pins, 0 [12]
+    set pins, 1 [23]
+    jmp x--, tx_bit
+
+rx_phase:
+    set pindirs, 0
+    set x, 23
+rx_delay:
+    jmp x--, rx_delay [15]
+    set x, 4
+rx_wait_outer:
+    set y, 31
+rx_wait_inner:
+    jmp pin, rx_wait_more [1]
+    jmp rx_sample
+rx_wait_more:
+    jmp y--, rx_wait_inner
+    jmp x--, rx_wait_outer
+
+rx_sample:
+    mov isr, null
+    set x, 31
+rx_sample_first:
+    in pins, 1 [9]
+    jmp x--, rx_sample_first
+    push noblock
+    set x, 31
+rx_sample_second:
+    in pins, 1 [9]
+    jmp x--, rx_sample_second
+    push noblock
+.wrap

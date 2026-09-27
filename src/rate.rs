@@ -113,6 +113,8 @@ pub async fn rate_task(
             }
         }
 
+        let esc_telemetry = frame.read_telemetry();
+
         total_duration_nanos += start.elapsed().as_nanos();
 
         counter += 1.0;
@@ -146,6 +148,7 @@ pub async fn rate_task(
                         out.actuators.motor_left_throttle,
                         out.actuators.motor_right_throttle,
                     );
+                    defmt::info!("[ESC] ML {:?} | MR {:?}", esc_telemetry[0], esc_telemetry[1]);
                 }
                 None => {
                     defmt::info!(
@@ -155,6 +158,7 @@ pub async fn rate_task(
                         SYSTEM.get_state(),
                         defmt::Debug2Format(&SYSTEM.get_arm_errors())
                     );
+                    defmt::info!("[ESC] ML {:?} | MR {:?}", esc_telemetry[0], esc_telemetry[1]);
                 }
             }
         }

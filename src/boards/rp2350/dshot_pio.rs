@@ -1,7 +1,9 @@
 use super::{MotorPinConcrete, Rp2350Dev};
 use crate::actuators::DshotChannel::MotorChannel;
+use crate::helpers::dshot::{decode_dshot_telemetry, DshotTelemetry};
+use embassy_rp::gpio::Pull;
 use embassy_rp::peripherals::PIO0;
-use embassy_rp::pio::program::pio_asm;
+use embassy_rp::pio::program::pio_file;
 use embassy_rp::pio::{Config, Direction, Pin, StateMachine};
 
 pub enum MotorSm {
@@ -23,6 +25,28 @@ macro_rules! init_motor_sm {
         }
     };
 }
+
+macro_rules! read_motor_rx {
+    ($sm: expr) => {{
+        let rx = $sm.rx();
+        let pairs = (rx.level() / 2) as usize;
+        let mut decoded = None;
+
+        for _ in 0..pairs {
+            let first = rx.pull();
+            let second = rx.pull();
+
+            if let Some(telemetry) =
+                decode_dshot_telemetry(((first as u64) << 32) | second as u64)
+            {
+                decoded = Some(telemetry);
+            }
+        }
+
+        decoded
+    }};
+}
+
 impl MotorSm {
     pub fn init(&mut self, config: &Config<'static, PIO0>, pin: &Pin<'static, PIO0>) {
         init_motor_sm!(self, config, pin, Sm0, Sm1, Sm2, Sm3);
@@ -31,10 +55,39 @@ impl MotorSm {
     pub fn push_tx(&mut self, throttle: u32) {
         // could use a macro or make the sm macro take different methods
         match self {
-            Self::Sm0(sm) => sm.tx().push(throttle),
-            Self::Sm1(sm) => sm.tx().push(throttle),
-            Self::Sm2(sm) => sm.tx().push(throttle),
-            Self::Sm3(sm) => sm.tx().push(throttle),
+            Self::Sm0(sm) => {
+                let tx = sm.tx();
+                if tx.empty() {
+                    tx.push(throttle);
+                }
+            }
+            Self::Sm1(sm) => {
+                let tx = sm.tx();
+                if tx.empty() {
+                    tx.push(throttle);
+                }
+            }
+            Self::Sm2(sm) => {
+                let tx = sm.tx();
+                if tx.empty() {
+                    tx.push(throttle);
+                }
+            }
+            Self::Sm3(sm) => {
+                let tx = sm.tx();
+                if tx.empty() {
+                    tx.push(throttle);
+                }
+            }
+        }
+    }
+
+    pub fn read_telemetry(&mut self) -> Option<DshotTelemetry> {
+        match self {
+            Self::Sm0(sm) => read_motor_rx!(sm),
+            Self::Sm1(sm) => read_motor_rx!(sm),
+            Self::Sm2(sm) => read_motor_rx!(sm),
+            Self::Sm3(sm) => read_motor_rx!(sm),
         }
     }
 }
@@ -62,45 +115,53 @@ impl MotorChannel for PioDshotChannel {
         self.sm.push_tx(val);
         Ok(())
     }
+
+    fn read_telemetry(&mut self) -> Option<DshotTelemetry> {
+        self.sm.read_telemetry()
+    }
 }
 
 pub fn take_motor(b: &mut Rp2350Dev) -> Option<MotorPinConcrete> {
-    let pio_program = pio_asm!(
-        ".side_set 1 opt",
-        ".wrap_target",
-        "pull",
-        "set y, 15",
-        "bitloop:",
-        "nop side 1 [2]",
-        "out pins, 1 [3]",
-        "nop side 0 [2]",
-        "jmp y-- bitloop",
-        "set x, 24",
-        "gap:",
-        "nop side 0 [7]",
-        "jmp x-- gap",
-        ".wrap",
+    let pio_program = pio_file!(
+        "src/boards/rp2350/bidir_dshot.pio",
+        options(max_program_size = 32)
     );
     let dshot_speed = 600_000;
-    let target_hz = dshot_speed * 10;
+    let target_hz = dshot_speed * 40;
     let clock = embassy_rp::pio_programs::clock_divider::calculate_pio_clock_divider(target_hz);
 
     let next_motor_pin = b
         .available_motors
         .pop_front()
         .expect("Couldn't pop motor pin");
-    let pin_dshot = next_motor_pin.into_pio(&mut b.pio_common);
+    let mut pin_dshot = next_motor_pin.into_pio(&mut b.pio_common);
+    pin_dshot.set_pull(Pull::Up);
 
     let mut config = embassy_rp::pio::Config::default();
 
-    let loaded_program = b.pio_common.load_program(&pio_program.program);
-    config.use_program(&loaded_program, &[&pin_dshot]);
+    if b.motor_program.is_none() {
+        let loaded = b.pio_common.load_program(&pio_program.program);
+        b.motor_program = Some(loaded);
+    }
+    let loaded_program = b
+        .motor_program
+        .as_ref()
+        .expect("Motor program not loaded");
+    config.use_program(loaded_program, &[]);
 
-    config.set_out_pins(&[&pin_dshot]);
+    config.set_jmp_pin(&pin_dshot);
+    config.set_set_pins(&[&pin_dshot]);
+    config.set_in_pins(&[&pin_dshot]);
     config.clock_divider = clock;
-    // config.shift_out.auto_fill = true;
-    config.shift_out.threshold = 16;
+    config.shift_out.auto_fill = false;
+    config.shift_out.threshold = 32;
     config.shift_out.direction = embassy_rp::pio::ShiftDirection::Left;
+
+    config.shift_in.auto_fill = false;
+    config.shift_in.threshold = 32;
+    config.shift_in.direction = embassy_rp::pio::ShiftDirection::Left;
+
+    config.fifo_join = embassy_rp::pio::FifoJoin::Duplex;
 
     // sm some fixen
     let mut sm_variant = b.available_sm.pop_front()?;

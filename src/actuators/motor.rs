@@ -1,4 +1,5 @@
 use crate::actuators::DshotChannel::MotorChannel;
+use crate::helpers::dshot::DshotTelemetry;
 
 // could be more generic over the channel type if i also want to support motors used with pwm
 pub struct MotorController<M> {
@@ -20,5 +21,9 @@ where
         // this is purely dshot now, should make a check somewhere wether to use dshot or something
         // else
         let _ = self.channel.set_throttle(packet);
+    }
+
+    pub fn read_telemetry(&mut self) -> Option<DshotTelemetry> {
+        self.channel.read_telemetry()
     }
 }

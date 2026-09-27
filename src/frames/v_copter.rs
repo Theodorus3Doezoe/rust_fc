@@ -3,7 +3,7 @@ use crate::actuators::servo::ServoController;
 use crate::boards::ActuatorProvider;
 use crate::config::frame::{MotorPin, ServoPin};
 use crate::config::{ActiveBoard, SERVO_FREQ_HZ};
-use crate::helpers::dshot::{create_dshot_frame, mixer_to_dshot_throttle};
+use crate::helpers::dshot::{create_dshot_frame, mixer_to_dshot_throttle, DshotTelemetry};
 use crate::mixers::bi_copter::{self, BiCopMixer, BicopterOutput};
 use embassy_time::{Duration, Timer};
 
@@ -30,6 +30,15 @@ pub struct ActuatorOutput {
 pub struct FrameOutput {
     pub mixer: BicopterOutput,
     pub actuators: ActuatorOutput,
+}
+
+impl VCopterFrame<ServoPin, MotorPin> {
+    pub fn read_telemetry(&mut self) -> [Option<DshotTelemetry>; 2] {
+        [
+            self.motor_left.read_telemetry(),
+            self.motor_right.read_telemetry(),
+        ]
+    }
 }
 
 impl Frame for VCopterFrame<ServoPin, MotorPin> {
@@ -78,8 +87,8 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let left = mixer_to_dshot_throttle(mixer_out.motor_left);
         let right = mixer_to_dshot_throttle(mixer_out.motor_right);
 
-        let motor_left_throttle = create_dshot_frame(left as u16, false);
-        let motor_right_throttle = create_dshot_frame(right as u16, false);
+        let motor_left_throttle = create_dshot_frame(left as u16, true);
+        let motor_right_throttle = create_dshot_frame(right as u16, true);
 
         self.motor_left.apply(motor_left_throttle);
         self.motor_right.apply(motor_right_throttle);
@@ -104,7 +113,7 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let _ = self.servo_left.set_duty(0.0);
         let _ = self.servo_right.set_duty(0.0);
 
-        let zero = create_dshot_frame(0, false);
+        let zero = create_dshot_frame(0, true);
         self.motor_left.apply(zero);
         self.motor_right.apply(zero);
 

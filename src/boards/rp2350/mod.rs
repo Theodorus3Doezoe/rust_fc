@@ -10,7 +10,7 @@ use embassy_rp::dma::InterruptHandler as DmaInterruptHandler;
 use embassy_rp::gpio::Output;
 use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, SPI0};
 use embassy_rp::peripherals::{PIO0, USB};
-use embassy_rp::pio::{Common, InterruptHandler as PioHandler, Pio};
+use embassy_rp::pio::{Common, InterruptHandler as PioHandler, LoadedProgram, Pio};
 use embassy_rp::pwm::PwmOutput;
 use embassy_rp::spi::{Async, Spi};
 use embassy_rp::usb::{Driver as RpUsbDriver, InterruptHandler as UsbInterruptHandler};
@@ -41,6 +41,7 @@ pub struct Rp2350Dev {
     pub available_motors: Deque<pins::MotorPins, 4>,
     pub available_sm: Deque<dshot_pio::MotorSm, 4>,
     pub pio_common: Common<'static, PIO0>,
+    pub motor_program: Option<LoadedProgram<'static, PIO0>>,
 }
 
 impl Board for Rp2350Dev {
@@ -102,6 +103,7 @@ impl Board for Rp2350Dev {
             available_motors,
             available_sm,
             pio_common: common,
+            motor_program: None,
         }
     }
 
