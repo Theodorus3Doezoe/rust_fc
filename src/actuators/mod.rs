@@ -1,4 +1,3 @@
-pub mod DshotChannel;
-pub mod motor;
-pub mod pio;
+// pub mod DshotChannel;
+pub mod dshot;
 pub mod servo;

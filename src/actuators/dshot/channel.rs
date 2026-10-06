@@ -1,4 +1,4 @@
-use crate::helpers::dshot::DshotTelemetry;
+use super::frame::DshotTelemetry;
 
 pub trait MotorChannel {
     type Error;

@@ -1,7 +1,6 @@
-pub mod dshot_pio;
 pub mod imu_spi;
 pub mod pins;
-pub mod pio_program;
+pub mod pio;
 pub mod servo_pwm;
 pub mod usb;
 
@@ -17,6 +16,8 @@ use embassy_rp::usb::{Driver as RpUsbDriver, InterruptHandler as UsbInterruptHan
 use embassy_rp::{Peri, bind_interrupts};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 
+use crate::boards::rp2350::pio::dshot_pio::{MotorSm, PioDshotChannel, take_motor};
+
 use heapless::Deque;
 
 bind_interrupts!(pub struct Irqs {
@@ -30,7 +31,7 @@ bind_interrupts!(pub struct Irqs {
 //Type aliases
 pub type PwmPinConcrete = PwmOutput<'static>;
 pub type ImuConcrete = ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, NoDelay>;
-pub type MotorPinConcrete = dshot_pio::PioDshotChannel;
+pub type MotorPinConcrete = PioDshotChannel;
 pub type StaticPeri<T> = Peri<'static, T>;
 
 pub struct Rp2350Dev {
@@ -39,7 +40,7 @@ pub struct Rp2350Dev {
     pub available_slices: Deque<pins::ServoSlice, 2>,
     pub pending_servo: Option<PwmPinConcrete>,
     pub available_motors: Deque<pins::MotorPins, 4>,
-    pub available_sm: Deque<dshot_pio::MotorSm, 4>,
+    pub available_sm: Deque<MotorSm, 4>,
     pub pio_common: Common<'static, PIO0>,
     pub motor_program: Option<LoadedProgram<'static, PIO0>>,
 }
@@ -89,10 +90,10 @@ impl Board for Rp2350Dev {
 
         // push created pio state machines into pio
         let mut available_sm = Deque::new();
-        available_sm.push_back(dshot_pio::MotorSm::Sm0(sm0));
-        available_sm.push_back(dshot_pio::MotorSm::Sm1(sm1));
-        available_sm.push_back(dshot_pio::MotorSm::Sm2(sm2));
-        available_sm.push_back(dshot_pio::MotorSm::Sm3(sm3));
+        available_sm.push_back(MotorSm::Sm0(sm0));
+        available_sm.push_back(MotorSm::Sm1(sm1));
+        available_sm.push_back(MotorSm::Sm2(sm2));
+        available_sm.push_back(MotorSm::Sm3(sm3));
 
         let usb_driver = usb::create_usb(p.USB, Irqs);
         Self {
@@ -125,6 +126,6 @@ impl ActuatorProvider for Rp2350Dev {
     }
 
     fn take_motor(&mut self) -> Option<Self::MotorPin> {
-        dshot_pio::take_motor(self)
+        take_motor(self)
     }
 }

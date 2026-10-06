@@ -1,3 +1,5 @@
+// this file contains dshot frame creation
+
 use nalgebra::ComplexField;
 
 const GCR_DECODE: [u8; 32] = [
@@ -28,7 +30,12 @@ fn push_run(levels: &mut u64, bits: &mut u32, level_high: bool, run_samples: u32
     let remaining = TELEMETRY_BITS.saturating_sub(*bits);
     let run_bits = ((run_samples + 1) / 3).clamp(1, 3).min(remaining);
 
-    *levels = (*levels << run_bits) | if level_high { (1u64 << run_bits) - 1 } else { 0 };
+    *levels = (*levels << run_bits)
+        | if level_high {
+            (1u64 << run_bits) - 1
+        } else {
+            0
+        };
     *bits += run_bits;
 
     *bits >= TELEMETRY_BITS

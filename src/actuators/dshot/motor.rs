@@ -1,5 +1,5 @@
-use crate::actuators::DshotChannel::MotorChannel;
-use crate::helpers::dshot::DshotTelemetry;
+use super::channel::MotorChannel;
+use super::frame::DshotTelemetry;
 
 // could be more generic over the channel type if i also want to support motors used with pwm
 pub struct MotorController<M> {

@@ -1,6 +1,6 @@
-use super::{MotorPinConcrete, Rp2350Dev};
-use crate::actuators::DshotChannel::MotorChannel;
-use crate::helpers::dshot::{decode_dshot_telemetry, DshotTelemetry};
+use crate::actuators::dshot::channel::MotorChannel;
+use crate::actuators::dshot::frame::{DshotTelemetry, decode_dshot_telemetry};
+use crate::boards::rp2350::{MotorPinConcrete, Rp2350Dev};
 use embassy_rp::gpio::Pull;
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::program::pio_file;
@@ -36,8 +36,7 @@ macro_rules! read_motor_rx {
             let first = rx.pull();
             let second = rx.pull();
 
-            if let Some(telemetry) =
-                decode_dshot_telemetry(((first as u64) << 32) | second as u64)
+            if let Some(telemetry) = decode_dshot_telemetry(((first as u64) << 32) | second as u64)
             {
                 decoded = Some(telemetry);
             }
@@ -123,7 +122,7 @@ impl MotorChannel for PioDshotChannel {
 
 pub fn take_motor(b: &mut Rp2350Dev) -> Option<MotorPinConcrete> {
     let pio_program = pio_file!(
-        "src/boards/rp2350/bidir_dshot.pio",
+        "src/boards/rp2350/pio/bidir_dshot.pio",
         options(max_program_size = 32)
     );
     let dshot_speed = 600_000;
@@ -143,10 +142,7 @@ pub fn take_motor(b: &mut Rp2350Dev) -> Option<MotorPinConcrete> {
         let loaded = b.pio_common.load_program(&pio_program.program);
         b.motor_program = Some(loaded);
     }
-    let loaded_program = b
-        .motor_program
-        .as_ref()
-        .expect("Motor program not loaded");
+    let loaded_program = b.motor_program.as_ref().expect("Motor program not loaded");
     config.use_program(loaded_program, &[]);
 
     config.set_jmp_pin(&pin_dshot);
