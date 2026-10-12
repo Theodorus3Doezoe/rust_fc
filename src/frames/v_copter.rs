@@ -3,7 +3,6 @@ use crate::actuators::servo::ServoController;
 use crate::boards::ActuatorProvider;
 use crate::config::frame::{MotorPin, ServoPin};
 use crate::config::{ActiveBoard, SERVO_FREQ_HZ};
-// use crate::helpers::dshot::{DshotTelemetry, create_dshot_frame, mixer_to_dshot_throttle};
 use crate::mixers::bi_copter::{self, BiCopMixer, BicopterOutput};
 use embassy_time::{Duration, Timer};
 
@@ -87,8 +86,8 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let left = frame::mixer_to_dshot_throttle(mixer_out.motor_left);
         let right = frame::mixer_to_dshot_throttle(mixer_out.motor_right);
 
-        let motor_left_throttle = frame::create_dshot_frame(left as u16, true);
-        let motor_right_throttle = frame::create_dshot_frame(right as u16, true);
+        let motor_left_throttle = frame::create_dshot_frame(left, true);
+        let motor_right_throttle = frame::create_dshot_frame(right, true);
 
         self.motor_left.apply(motor_left_throttle);
         self.motor_right.apply(motor_right_throttle);
