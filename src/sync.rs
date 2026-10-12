@@ -1,5 +1,4 @@
 //types for Imu queue
-use crate::state::FlightMode;
 use crate::types::{ImuBurst, Rates};
 use core::sync::atomic::{AtomicU32, Ordering};
 use heapless::spsc::{Consumer, Producer, Queue};

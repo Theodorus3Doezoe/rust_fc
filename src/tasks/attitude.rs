@@ -1,9 +1,7 @@
-use core::{sync::atomic::Ordering, time::Duration as CoreDuration};
 use embassy_time::{Duration, Instant, Ticker};
-use nalgebra::Vector3;
 
 use crate::{
-    config::{ATTITUDE_FREQ_HZ, RATE_FREQ_HZ},
+    config::ATTITUDE_FREQ_HZ,
     controllers::p_controller::AngleController,
     filters::vqf,
     state::{ArmBlockFlags, FlightMode, SYSTEM},

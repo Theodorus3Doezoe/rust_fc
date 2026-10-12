@@ -1,7 +1,6 @@
 use super::receiver::{RcChannels, Receiver};
-use crate::usb::{UsbManager, UsbRxDriver};
+use crate::tasks::usb::{UsbManager, UsbRxDriver};
 use embassy_usb::driver::EndpointError;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum UsbReceiverError {

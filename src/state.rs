@@ -1,6 +1,5 @@
 use bitflags::bitflags;
 use core::sync::atomic::{AtomicU8, AtomicU16, Ordering};
-use defmt::info;
 use serde::{Deserialize, Serialize};
 
 pub static SYSTEM: SystemState = SystemState::new();

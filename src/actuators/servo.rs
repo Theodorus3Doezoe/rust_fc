@@ -1,7 +1,5 @@
 use embedded_hal::pwm::SetDutyCycle;
 
-use crate::types::Rates;
-
 pub struct ServoController<P> {
     pwm_channel: P,
     offset: f32,

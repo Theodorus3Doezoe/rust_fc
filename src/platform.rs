@@ -1,10 +1,9 @@
 // use crate::config::{Board, BoardType, frame, imu};
 use crate::config::{ActiveBoard, frame, receiver};
-use crate::usb::UsbDev;
+use crate::tasks::usb;
 use crate::{
     config::*,
-    state::{ArmBlockFlags, SYSTEM, State, SystemState},
-    usb::setup_usb,
+    state::{ArmBlockFlags, SYSTEM},
 };
 // use crate::config::{Board, BoardType, ConcreteImu, RawImu};
 
@@ -12,7 +11,7 @@ pub struct Platform {
     pub board: ActiveBoard, // can be dropped
     pub imu: imu::Calibrated,
     pub frame: frame::Concrete,
-    pub usb_dev: UsbDev,
+    pub usb_dev: usb::UsbDev,
     pub rx: receiver::Concrete,
 }
 
@@ -50,7 +49,7 @@ impl Platform {
         //
         let usb_driver = board.take_usb_driver();
 
-        let usb_dev = crate::usb::UsbManager::init(usb_driver);
+        let usb_dev = usb::UsbManager::init(usb_driver);
 
         let rx = receiver::Concrete::init();
         // let tx = telemetry::Concrete::init();
