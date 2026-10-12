@@ -1,9 +1,9 @@
-use crate::actuators::motor::MotorController;
+use crate::actuators::dshot::{frame, motor};
 use crate::actuators::servo::ServoController;
 use crate::boards::ActuatorProvider;
 use crate::config::frame::{MotorPin, ServoPin};
 use crate::config::{ActiveBoard, SERVO_FREQ_HZ};
-use crate::helpers::dshot::{create_dshot_frame, mixer_to_dshot_throttle, DshotTelemetry};
+// use crate::helpers::dshot::{DshotTelemetry, create_dshot_frame, mixer_to_dshot_throttle};
 use crate::mixers::bi_copter::{self, BiCopMixer, BicopterOutput};
 use embassy_time::{Duration, Timer};
 
@@ -12,8 +12,8 @@ use super::*;
 pub struct VCopterFrame<P, M> {
     servo_left: ServoController<P>,
     servo_right: ServoController<P>,
-    motor_left: MotorController<M>,
-    motor_right: MotorController<M>,
+    motor_left: motor::MotorController<M>,
+    motor_right: motor::MotorController<M>,
     mixer: BiCopMixer,
 }
 
@@ -33,7 +33,7 @@ pub struct FrameOutput {
 }
 
 impl VCopterFrame<ServoPin, MotorPin> {
-    pub fn read_telemetry(&mut self) -> [Option<DshotTelemetry>; 2] {
+    pub fn read_telemetry(&mut self) -> [Option<frame::DshotTelemetry>; 2] {
         [
             self.motor_left.read_telemetry(),
             self.motor_right.read_telemetry(),
@@ -69,8 +69,8 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
             servo_left: ServoController::new(left_servo_pin, 0.0, false, SERVO_FREQ_HZ),
             servo_right: ServoController::new(right_servo_pin, 0.0, false, SERVO_FREQ_HZ),
 
-            motor_left: MotorController::new(left_motor_pin, true),
-            motor_right: MotorController::new(right_motor_pin, false),
+            motor_left: motor::MotorController::new(left_motor_pin, true),
+            motor_right: motor::MotorController::new(right_motor_pin, false),
             // temp hard coded
             mixer: bi_copter::BiCopMixer::init(5.0, 0.0, 0.0),
         }
@@ -84,11 +84,11 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let servo_right_us = self.servo_right.set_duty(mixer_out.servo_right);
 
         // motors
-        let left = mixer_to_dshot_throttle(mixer_out.motor_left);
-        let right = mixer_to_dshot_throttle(mixer_out.motor_right);
+        let left = frame::mixer_to_dshot_throttle(mixer_out.motor_left);
+        let right = frame::mixer_to_dshot_throttle(mixer_out.motor_right);
 
-        let motor_left_throttle = create_dshot_frame(left as u16, true);
-        let motor_right_throttle = create_dshot_frame(right as u16, true);
+        let motor_left_throttle = frame::create_dshot_frame(left as u16, true);
+        let motor_right_throttle = frame::create_dshot_frame(right as u16, true);
 
         self.motor_left.apply(motor_left_throttle);
         self.motor_right.apply(motor_right_throttle);
@@ -113,7 +113,7 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let _ = self.servo_left.set_duty(0.0);
         let _ = self.servo_right.set_duty(0.0);
 
-        let zero = create_dshot_frame(0, true);
+        let zero = frame::create_dshot_frame(0, true);
         self.motor_left.apply(zero);
         self.motor_right.apply(zero);
 
