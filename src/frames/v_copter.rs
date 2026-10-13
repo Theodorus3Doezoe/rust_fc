@@ -1,5 +1,5 @@
-use crate::actuators::dshot::{frame, motor};
 use crate::actuators::servo::ServoController;
+use crate::actuators::{dshot::frame, motor};
 use crate::boards::ActuatorProvider;
 use crate::config::frame::{MotorPin, ServoPin};
 use crate::config::{ActiveBoard, SERVO_FREQ_HZ};
@@ -34,8 +34,8 @@ pub struct FrameOutput {
 impl VCopterFrame<ServoPin, MotorPin> {
     pub fn read_telemetry(&mut self) -> [Option<frame::DshotTelemetry>; 2] {
         [
-            self.motor_left.read_telemetry(),
-            self.motor_right.read_telemetry(),
+            self.motor_left.latest_telemetry(),
+            self.motor_right.latest_telemetry(),
         ]
     }
 }
@@ -83,22 +83,22 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let servo_right_us = self.servo_right.set_duty(mixer_out.servo_right);
 
         // motors
-        let left = frame::mixer_to_dshot_throttle(mixer_out.motor_left);
-        let right = frame::mixer_to_dshot_throttle(mixer_out.motor_right);
-
-        let motor_left_throttle = frame::create_dshot_frame(left, true);
-        let motor_right_throttle = frame::create_dshot_frame(right, true);
-
-        self.motor_left.apply(motor_left_throttle);
-        self.motor_right.apply(motor_right_throttle);
+        // let left = frame::mixer_to_dshot_throttle(mixer_out.motor_left);
+        // let right = frame::mixer_to_dshot_throttle(mixer_out.motor_right);
+        //
+        // let motor_left_throttle = frame::create_dshot_frame(left, true);
+        // let motor_right_throttle = frame::create_dshot_frame(right, true);
+        //
+        self.motor_left.apply(mixer_out.motor_left);
+        self.motor_right.apply(mixer_out.motor_right);
 
         let info = ActuatorOutput {
             servo_left_us,
             servo_right_us,
-            ml_raw_to_dshot: left,
-            mr_raw_to_dshot: right,
-            motor_left_throttle,
-            motor_right_throttle,
+            ml_raw_to_dshot: 0,
+            mr_raw_to_dshot: 0,
+            motor_left_throttle: 0,
+            motor_right_throttle: 0,
         };
 
         //for telemetry
@@ -112,12 +112,8 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let _ = self.servo_left.set_duty(0.0);
         let _ = self.servo_right.set_duty(0.0);
 
-        let zero = frame::create_dshot_frame(0, true);
-        self.motor_left.apply(zero);
-        self.motor_right.apply(zero);
-
-        // self.motor_left.apply(0);
-        // self.motor_right.apply(0);
+        self.motor_left.apply(0.0);
+        self.motor_right.apply(0.0);
     }
 
     // async fn arm_motor(&mut self) {
@@ -139,18 +135,17 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         let cmd_left = if self.motor_left.cw { 7 } else { 8 };
         let cmd_right = if self.motor_right.cw { 7 } else { 8 };
         for _ in 0..10 {
-            self.motor_left.apply(cmd_left);
-            self.motor_right.apply(cmd_right);
+            self.motor_left.command(cmd_left);
+            self.motor_right.command(cmd_right);
             Timer::after(Duration::from_micros(100)).await;
         }
 
         if permanent {
             for _ in 0..10 {
-                self.motor_left.apply(12);
-                self.motor_right.apply(12);
+                self.motor_left.command(12);
+                self.motor_right.command(12);
                 Timer::after(Duration::from_micros(100)).await;
             }
         }
-        todo!()
     }
 }

@@ -1,6 +1,6 @@
 use super::channel::MotorChannel;
 
-pub struct MotorController<C: MotorChannel> {
+pub struct MotorController<C> {
     channel: C,
     pub cw: bool,
 }

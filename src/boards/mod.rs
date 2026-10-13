@@ -1,4 +1,4 @@
-use crate::actuators::dshot::channel::MotorChannel;
+use crate::actuators::channel::MotorChannel;
 use embassy_usb_driver::Driver;
 use embedded_hal::pwm::SetDutyCycle;
 use embedded_hal_async::spi::SpiDevice;
