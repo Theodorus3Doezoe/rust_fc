@@ -1,6 +1,8 @@
 // use crate::actuators::dshot::dshot_channel::MotorChannel;
 use crate::actuators::channel::MotorChannel;
-use crate::actuators::dshot::frame::{DshotTelemetry, create_dshot_frame, decode_dshot_telemetry};
+use crate::actuators::dshot::frame::{
+    DshotTelemetry, create_dshot_frame, decode_dshot_telemetry, throttle_to_dshot_value,
+};
 use crate::boards::rp2350::{MotorPinConcrete, Rp2350Dev};
 use embassy_rp::gpio::Pull;
 use embassy_rp::peripherals::PIO0;
@@ -111,13 +113,9 @@ impl MotorChannel for PioDshotChannel {
     type Error = PioDshotChannelError;
 
     fn set_throttle(&mut self, throttle: f32) -> Result<(), Self::Error> {
-        let value = if throttle <= 0.0 {
-            0
-        } else {
-            48 + (throttle.min(1.0) * (2047.0 - 48.0)) as u16
-        };
+        let throttle = throttle_to_dshot_value(throttle);
 
-        let frame = create_dshot_frame(value, true);
+        let frame = create_dshot_frame(throttle, true);
         self.sm.push_tx((frame as u32) << 16);
         Ok(())
     }
@@ -126,7 +124,9 @@ impl MotorChannel for PioDshotChannel {
         self.sm.read_telemetry()
     }
     fn esc_command(&mut self, cmd: u8) -> Result<(), Self::Error> {
-        todo!()
+        let frame = create_dshot_frame(cmd as u16, true);
+        self.sm.push_tx((frame as u32) << 16);
+        Ok(())
     }
 }
 

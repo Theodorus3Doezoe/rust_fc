@@ -116,7 +116,10 @@ pub fn decode_dshot_telemetry(samples: u64) -> Option<DshotTelemetry> {
     })
 }
 
-pub fn mixer_to_dshot_throttle(mixer_value: f32) -> u16 {
+pub fn throttle_to_dshot_value(mixer_value: f32) -> u16 {
+    if mixer_value <= 0.0 {
+        return 0;
+    }
     let clamped = mixer_value.clamp(0.0, 1.0);
 
     let dshot = 48.0 + clamped * (2047.0 - 48.0);

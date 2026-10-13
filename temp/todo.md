@@ -1,16 +1,15 @@
 # Todo restructure
 
-## 0. Eerst fixen (build is nu stuk)
-- [ ] `boards/mod.rs`: `dshot::channel::MotorChannel` → `actuators::channel::MotorChannel`
-- [ ] `v_copter.rs`: `use crate::actuators::dshot::{frame, motor}` → `motor` uit `actuators::motor`
-- [ ] `v_copter.rs`: `apply(f32)` i.p.v. frames; `read_telemetry` → `latest_telemetry`; `stop_all` → `apply(0.0)`; `set_direction` → `command(cmd)`
+## 0. Fixen (klaar)
+- [x] `boards/mod.rs`: `dshot::channel::MotorChannel` → `actuators::channel::MotorChannel`
+- [x] `v_copter.rs`: `use crate::actuators::dshot::{frame, motor}` → `motor` uit `actuators::motor`
+- [x] `v_copter.rs`: `apply(f32)` i.p.v. frames; `read_telemetry` → `latest_telemetry`; `stop_all` → `apply(0.0)`; `set_direction` → `command(cmd)`
 
-## 1. Fase A afmaken
+## 1. Fase A (klaar)
 - [x] `actuators/channel.rs`: generieke `MotorChannel` (f32, `latest_telemetry`, `esc_command`)
 - [x] `actuators/motor.rs`: `MotorController<C>`
-- [ ] `frame.rs`: `mixer_to_dshot_throttle` → `throttle_to_dshot_value` (0.0 = stop) + `encode_dshot_frame`
-- [ ] `dshot_pio.rs`: conversie eruit → helpers uit `frame.rs`; `esc_command` invullen (geen `todo!()`)
-- [ ] `dshot_channel.rs`: oude trait (u16) opruimen / ombouwen naar link-versie
+- [x] `frame.rs`: `throttle_to_dshot_value` met 0.0 = stop
+- [x] `dshot_pio.rs`: `esc_command` (shift `<< 16`) + helper gebruikt
 
 ## 2. Fase B (eindvorm)
 - [ ] `dshot/state.rs`: `EscLink` (`Signal<u32>` + 2× `AtomicU32`: erpm + periode) + statics
