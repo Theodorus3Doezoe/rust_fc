@@ -12,14 +12,15 @@
 - [x] `dshot_pio.rs`: `esc_command` (shift `<< 16`) + helper gebruikt
 
 ## 2. Fase B (eindvorm)
-- [ ] `dshot/state.rs`: `EscLink` (`Signal<u32>` + 2× `AtomicU32`: erpm + periode) + statics
+- [ ] `dshot/state.rs`: `EscLink` (`Signal<u16>` + 3× `AtomicU32`: raw + erpm + periode) + statics + `claim_link()`; `latest()` geeft `Option<DshotTelemetry>`
 - [ ] `dshot/driver.rs`: `EscDriver` trait (async `send_frame`, `read_pair`)
 - [ ] `dshot/dshot_channel.rs`: `DshotChannel { link }` impl `MotorChannel` (encode + telemetrie via link)
-- [ ] board: `PioEscDriver { sm, link }` impl `EscDriver` + `take_motor_drivers()`
+- [ ] board: `PioEscDriver { sm }` impl `EscDriver` + `type Esc` op de provider + `take_motor_drivers()`
+- [ ] `actuators/provider.rs`: `ActuatorProvider` uit `boards/`; default `take_motor` koppelt de link (`claim_link`), board levert alleen ruwe SM via `take_motor_hardware`
 - [ ] `tasks/esc_telemetry.rs`: `link.wait → driver.send_frame → driver.read_pair → decode → link.publish`
-- [ ] `config.rs`: `DSHOT_SPEED_HZ` + `EscDriver` type alias (geen generics in `#[task]`)
-- [ ] `platform.rs` / `main.rs`: drivers ophalen + taak spawnen
-- [ ] `v_copter.rs`: `set_direction` `todo!()` eruit
+- [ ] `config.rs`: `DSHOT_SPEED_HZ` + alias `esc::Driver = <ActiveBoard as ActuatorProvider>::Esc` (geen generics in `#[task]`)
+- [ ] `platform.rs` / `main.rs`: drivers ophalen, koppelen aan `ESC_LINKS` op volgorde, taak spawnen
+- [x] `v_copter.rs`: `set_direction` `todo!()` eruit
 
 ## 3. Opruimen (warnings)
 - [ ] `tasks/rate.rs`: unused imports (`ActiveBoard`, `ImuBurst`)

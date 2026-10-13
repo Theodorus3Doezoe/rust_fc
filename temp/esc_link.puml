@@ -1,0 +1,54 @@
+@startuml
+title Fase B: wie bezit wat
+
+skinparam shadowing false
+
+class "frame (v_copter)" as F
+class "MotorController<C>" as MC {
+  channel: C
+  cw: bool
+}
+class "DshotChannel" as DC {
+  link: &'static EscLink
+}
+class "esc_task" as T {
+  drivers: [PioEscDriver; N]
+  link: &'static EscLink
+}
+class "PioEscDriver" as DRV {
+  sm: MotorSm
+}
+class "EscLink (static)" as L {
+  tx: Signal<u16>
+  raw: AtomicU32
+  erpm: AtomicU32
+  period_us: AtomicU32
+}
+note right of L : claim_link() geeft &ESC_LINKS[k]\n(array + AtomicUsize-teller)
+
+F *-- MC : bezit
+MC *-- DC : bezit
+T *-- DRV : bezit
+DC --> L : verwijst
+T --> L : verwijst
+@enduml
+
+
+@startuml
+title Een tick: de link als postbus
+
+participant "DshotChannel\n(rate loop)" as DC
+participant "EscLink" as L
+participant "esc_task" as T
+participant "PioEscDriver + SM" as D
+
+DC -> L : send(frame)
+note right of L : Signal houdt het laatste frame
+T -> L : wait() -> frame
+T -> D : send_frame
+D --> T : ruwe paren (read_pair)
+T -> L : publish(eRPM, periode)
+note right of L : atomen houden de laatste waarde
+DC -> L : latest()
+L --> DC : eRPM (of None)
+@enduml

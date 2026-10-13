@@ -39,6 +39,11 @@ v_copter → MotorController<C> → MotorChannel (trait, f32 0..1)
 - De SM heeft één eigenaar (de taak via de driver); de rate loop raakt de SM niet meer aan.
 - Ander board (STM32/DMA) = eigen `EscDriver`; `DshotChannel` en de taak blijven gelijk.
 
-## Status (12 okt)
-- Klaar: generieke `MotorChannel` (f32) + `MotorController`; `PioDshotChannel` op de nieuwe trait.
-- Nu: build stuk (imports + `v_copter` op oude API), zie `temp/todo.md` sectie 0.
+## Opstarten
+- `platform`: board init → `frame::init(&mut board)` → daarna drivers uit de doos halen + `ESC_LINKS[k]` koppelen → `esc_task` spawnen.
+- `take_motor()` (default op `ActuatorProvider`, verhuist naar `actuators/provider.rs`): board zet de SM klaar (in zijn doos), default pakt de volgende link (`claim_link()`) en geeft `DshotChannel { link }` aan het frame.
+- Links: `[EscLink; N]` statics + `AtomicUsize`-teller; beide kanten krijgen `&'static EscLink`.
+
+## Status (13 okt)
+- Klaar (fase A, gecommit): generieke `MotorChannel` (f32) + `MotorController`; `PioDshotChannel` op de nieuwe trait; 0 = stop; `esc_command`.
+- Fase B gestart: stap 1 = `EscLink` in `state.rs`; zie `temp/todo.md` sectie 2.

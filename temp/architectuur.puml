@@ -1,0 +1,88 @@
+@startuml
+title Fase B doelbeeld: lagen en interacties
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+package "rate loop (8 kHz) - mag nooit awaiten" as RL {
+  [rate_task] as RATE
+  [MotorController] as MCTRL
+  [DshotChannel\n(bord-vrij)] as DC
+}
+
+package "actuators/dshot - bord-vrij" as AD {
+  [EscLink\npostbus] as LINK
+  [frame.rs\nencode / decode] as FRAME
+}
+
+package "esc taak - async" as ET {
+  [esc_task] as TASK
+}
+
+package "boards/rp2350" as BR {
+  [PioEscDriver] as DRV
+  [PIO SM\nhardware timing] as SM
+}
+
+[ESC] as ESC
+
+RATE --> MCTRL : apply(f32)
+MCTRL --> DC : set_throttle(f32)
+DC --> FRAME : waarde + frame maken
+DC --> LINK : send(frame)
+LINK --> TASK : wait() -> frame
+TASK --> DRV : send_frame(frame)
+DRV --> SM : TX FIFO
+SM --> ESC : DShot frame
+ESC --> SM : antwoord
+TASK --> DRV : read_pair()
+TASK --> LINK : publish(eRPM, periode)
+LINK --> DC : latest()
+DC --> RATE : latest_telemetry()
+@enduml
+
+
+@startuml
+title Fase B: een tick (125 us)
+
+participant "rate_task" as R
+participant "DshotChannel" as D
+participant "EscLink" as L
+participant "esc_task" as T
+participant "PioEscDriver + PIO SM" as P
+participant "ESC" as E
+
+== heen ==
+R -> D : apply(f32)
+D -> D : f32 -> waarde -> frame (CRC + tlm-bit)
+D -> L : send(frame)
+T -> L : wait() -> frame
+T -> P : send_frame(frame)
+P -> E : DShot frame
+== terug ==
+E -> P : antwoord ~22 us na frame-einde
+T -> P : read_pair()
+P --> T : (u32, u32) ruwe samples
+T -> T : decode -> eRPM
+T -> L : publish(eRPM, periode)
+R -> D : latest_telemetry()
+D --> R : atomen
+@enduml
+
+
+@startuml
+title Opstarten: wie krijgt wat
+
+participant "platform" as P
+participant "frame" as F
+participant "board\n(ActuatorProvider default take_motor)" as B
+participant "esc_task" as T
+
+P -> F : init(&mut board)
+F -> B : take_motor()  (2x)
+B -> B : SM klaarzetten -> PioEscDriver in de doos
+B -> B : claim_link() -> &ESC_LINKS[k]
+B --> F : DshotChannel { link }  (link 0, link 1)
+P -> B : take_motor_driver()  (2x)
+P -> T : spawn esc_task(driver, &ESC_LINKS[k])
+@enduml
