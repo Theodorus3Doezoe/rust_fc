@@ -25,6 +25,7 @@ impl AtomicF32 {
     }
 }
 
+// can have updates while reading could use seqlock
 pub struct AtomicRates {
     pub roll: AtomicF32,
     pub pitch: AtomicF32,

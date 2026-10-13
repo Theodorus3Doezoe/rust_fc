@@ -4,6 +4,7 @@ pub struct MotorController<C> {
     channel: C,
     pub cw: bool,
 }
+
 impl<C: MotorChannel> MotorController<C> {
     pub fn new(channel: C, cw: bool) -> Self {
         Self { channel, cw }
