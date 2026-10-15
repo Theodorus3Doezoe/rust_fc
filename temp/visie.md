@@ -40,10 +40,10 @@ v_copter → MotorController<C> → MotorChannel (trait, f32 0..1)
 - Ander board (STM32/DMA) = eigen `EscDriver`; `DshotChannel` en de taak blijven gelijk.
 
 ## Opstarten
-- `platform`: board init → `frame::init(&mut board)` → daarna drivers uit de doos halen + `ESC_LINKS[k]` koppelen → `esc_task` spawnen.
-- `take_motor()` (default op `ActuatorProvider`, verhuist naar `actuators/provider.rs`): board zet de SM klaar (in zijn doos), default pakt de volgende link (`claim_link()`) en geeft `DshotChannel { link }` aan het frame.
+- `platform`: board init → `frame::init(&mut board)` → daarna `take_esc_driver()` per motor + `ESC_LINKS[k]` koppelen → `esc_task` spawnen.
+- `take_motor()` (default op `ActuatorProvider`, verhuist naar `actuators/provider.rs`): pakt alleen de volgende link (`claim_link()`) en geeft `DshotChannel { link }` aan het frame.
 - Links: `[EscLink; N]` statics + `AtomicUsize`-teller; beide kanten krijgen `&'static EscLink`.
 
 ## Status (13 okt)
 - Klaar (fase A, gecommit): generieke `MotorChannel` (f32) + `MotorController`; `PioDshotChannel` op de nieuwe trait; 0 = stop; `esc_command`.
-- Fase B: stap 1 (`EscLink` + `claim_link`) klaar; volgende stap = `driver.rs`. Zie `temp/todo.md` sectie 2.
+- Fase B: stappen 1-6 klaar (EscLink, EscDriver, DshotChannel, provider + PioEscDriver, esc-taak, wiring); alleen FC-test (stap 7) + `DSHOT_SPEED_HZ` naar config.

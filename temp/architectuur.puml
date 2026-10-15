@@ -80,9 +80,9 @@ participant "esc_task" as T
 
 P -> F : init(&mut board)
 F -> B : take_motor()  (2x)
-B -> B : SM klaarzetten -> PioEscDriver in de doos
 B -> B : claim_link() -> &ESC_LINKS[k]
 B --> F : DshotChannel { link }  (link 0, link 1)
-P -> B : take_motor_driver()  (2x)
+P -> B : take_esc_driver()  (2x)
+B -> B : SM opzetten -> PioEscDriver
 P -> T : spawn esc_task(driver, &ESC_LINKS[k])
 @enduml
