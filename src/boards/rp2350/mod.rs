@@ -16,7 +16,7 @@ use embassy_rp::usb::{Driver as RpUsbDriver, InterruptHandler as UsbInterruptHan
 use embassy_rp::{Peri, bind_interrupts};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 
-use crate::boards::rp2350::pio::dshot_pio::{MotorSm, PioDshotChannel, take_motor};
+use crate::boards::rp2350::pio::dshot_pio::{MotorSm, PioEscDriver, take_esc_driver};
 
 use heapless::Deque;
 
@@ -31,7 +31,6 @@ bind_interrupts!(pub struct Irqs {
 //Type aliases
 pub type PwmPinConcrete = PwmOutput<'static>;
 pub type ImuConcrete = ExclusiveDevice<Spi<'static, SPI0, Async>, Output<'static>, NoDelay>;
-pub type MotorPinConcrete = PioDshotChannel;
 pub type StaticPeri<T> = Peri<'static, T>;
 
 pub struct Rp2350Dev {
@@ -119,13 +118,13 @@ impl Board for Rp2350Dev {
 
 impl ActuatorProvider for Rp2350Dev {
     type ServoPin = PwmPinConcrete;
-    type MotorPin = MotorPinConcrete;
+    type Esc = PioEscDriver;
 
     fn take_servo(&mut self) -> Option<Self::ServoPin> {
         servo_pwm::take_servo(self)
     }
 
-    fn take_motor(&mut self) -> Option<Self::MotorPin> {
-        take_motor(self)
+    fn take_esc_driver(&mut self) -> Option<Self::Esc> {
+        take_esc_driver(self)
     }
 }

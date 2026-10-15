@@ -6,6 +6,7 @@ pub use crate::sensors::{Imu, mpu6500::Mpu6500};
 pub type ActiveBoard = rp2350::Rp2350Dev;
 pub type SelectedImuDriver<SPI> = Mpu6500<SPI>;
 pub type ActiveFrame<P, M> = VCopterFrame<P, M>;
+
 // pub type ActiveTelemetry = usb::UsbTx;
 //
 
@@ -23,17 +24,23 @@ pub mod imu {
 
 pub mod frame {
 
-    use crate::boards::ActuatorProvider;
+    use crate::actuators::{dshot::dshot_channel::DshotChannel, provider::ActuatorProvider};
 
     use super::*;
 
     pub type ServoPin = <ActiveBoard as ActuatorProvider>::ServoPin;
-    pub type MotorPin = <ActiveBoard as ActuatorProvider>::MotorPin;
+    // pub type MotorPin = <ActiveBoard as ActuatorProvider>::MotorPin;
+    pub type MotorPin = DshotChannel;
     pub type Concrete = ActiveFrame<ServoPin, MotorPin>;
 }
 
 pub mod receiver {
     pub type Concrete = crate::receiver::usb_receiver::UsbReceiver;
+}
+pub mod esc {
+    use super::*;
+    use crate::actuators::provider::ActuatorProvider;
+    pub type Driver = <ActiveBoard as ActuatorProvider>::Esc;
 }
 
 // pub mod telemetry {

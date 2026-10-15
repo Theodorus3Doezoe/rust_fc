@@ -1,17 +1,8 @@
-use crate::actuators::channel::MotorChannel;
+use crate::actuators::provider::ActuatorProvider;
 use embassy_usb_driver::Driver;
-use embedded_hal::pwm::SetDutyCycle;
 use embedded_hal_async::spi::SpiDevice;
 
 pub mod rp2350;
-
-pub trait ActuatorProvider {
-    type ServoPin: SetDutyCycle;
-    type MotorPin: MotorChannel;
-
-    fn take_servo(&mut self) -> Option<Self::ServoPin>;
-    fn take_motor(&mut self) -> Option<Self::MotorPin>;
-}
 
 pub trait Board: ActuatorProvider {
     type ImuSpi: SpiDevice;

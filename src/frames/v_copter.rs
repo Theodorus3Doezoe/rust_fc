@@ -1,6 +1,6 @@
+use crate::actuators::provider::ActuatorProvider;
 use crate::actuators::servo::ServoController;
 use crate::actuators::{dshot::frame, motor};
-use crate::boards::ActuatorProvider;
 use crate::config::frame::{MotorPin, ServoPin};
 use crate::config::{ActiveBoard, SERVO_FREQ_HZ};
 use crate::mixers::bi_copter::{self, BiCopMixer, BicopterOutput};
@@ -32,7 +32,9 @@ pub struct FrameOutput {
 }
 
 impl VCopterFrame<ServoPin, MotorPin> {
-    pub fn read_telemetry(&mut self) -> [Option<frame::DshotTelemetry>; 2] {
+    pub fn read_telemetry(
+        &mut self,
+    ) -> [Option<frame::DshotTelemetry>; <Self as Frame>::MOTOR_COUNT] {
         [
             self.motor_left.latest_telemetry(),
             self.motor_right.latest_telemetry(),
@@ -45,6 +47,7 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
     // type ServoPin = B::ServoPin;
     // type MotorPin = B::MotorPin;
     type Mixer = self::BiCopMixer;
+    const MOTOR_COUNT: usize = 2;
 
     fn init(provider: &mut Self::Board) -> Self {
         let left_servo_pin = provider

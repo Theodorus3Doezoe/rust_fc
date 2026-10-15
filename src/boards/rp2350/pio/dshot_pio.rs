@@ -1,9 +1,7 @@
 // use crate::actuators::dshot::dshot_channel::MotorChannel;
-use crate::actuators::channel::MotorChannel;
-use crate::actuators::dshot::frame::{
-    DshotTelemetry, create_dshot_frame, decode_dshot_telemetry, throttle_to_dshot_value,
-};
-use crate::boards::rp2350::{MotorPinConcrete, Rp2350Dev};
+use crate::actuators::dshot::driver::EscDriver;
+
+use crate::boards::rp2350::Rp2350Dev;
 use embassy_rp::gpio::Pull;
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::program::pio_file;
@@ -29,24 +27,20 @@ macro_rules! init_motor_sm {
     };
 }
 
-macro_rules! read_motor_rx {
-    ($sm: expr) => {{
-        let rx = $sm.rx();
-        let pairs = (rx.level() / 2) as usize;
-        let mut decoded = None;
-
-        for _ in 0..pairs {
-            let first = rx.pull();
-            let second = rx.pull();
-
-            if let Some(telemetry) = decode_dshot_telemetry(((first as u64) << 32) | second as u64)
-            {
-                decoded = Some(telemetry);
-            }
+macro_rules! wait_tx_space {
+    ($sm:expr, $val:expr, $($variant:ident),* $(,)?) => {
+        match $sm {
+            $(MotorSm::$variant(sm) => sm.tx().wait_push($val).await,)*
         }
+    };
+}
 
-        decoded
-    }};
+macro_rules! wait_rx_word {
+    ($sm:expr, $($variant:ident),* $(,)?) => {
+        match $sm {
+            $(MotorSm::$variant(sm) => sm.rx().wait_pull().await,)*
+        }
+    };
 }
 
 impl MotorSm {
@@ -54,43 +48,12 @@ impl MotorSm {
         init_motor_sm!(self, config, pin, Sm0, Sm1, Sm2, Sm3);
     }
 
-    pub fn push_tx(&mut self, throttle: u32) {
-        // could use a macro or make the sm macro take different methods
-        match self {
-            Self::Sm0(sm) => {
-                let tx = sm.tx();
-                if tx.empty() {
-                    tx.push(throttle);
-                }
-            }
-            Self::Sm1(sm) => {
-                let tx = sm.tx();
-                if tx.empty() {
-                    tx.push(throttle);
-                }
-            }
-            Self::Sm2(sm) => {
-                let tx = sm.tx();
-                if tx.empty() {
-                    tx.push(throttle);
-                }
-            }
-            Self::Sm3(sm) => {
-                let tx = sm.tx();
-                if tx.empty() {
-                    tx.push(throttle);
-                }
-            }
-        }
+    pub async fn push_tx(&mut self, value: u32) {
+        wait_tx_space!(self, value, Sm0, Sm1, Sm2, Sm3)
     }
 
-    pub fn read_telemetry(&mut self) -> Option<DshotTelemetry> {
-        match self {
-            Self::Sm0(sm) => read_motor_rx!(sm),
-            Self::Sm1(sm) => read_motor_rx!(sm),
-            Self::Sm2(sm) => read_motor_rx!(sm),
-            Self::Sm3(sm) => read_motor_rx!(sm),
-        }
+    pub async fn read_word(&mut self) -> u32 {
+        wait_rx_word!(self, Sm0, Sm1, Sm2, Sm3)
     }
 }
 
@@ -108,29 +71,43 @@ impl PioDshotChannel {
     }
 }
 
-impl MotorChannel for PioDshotChannel {
-    type Telemetry = DshotTelemetry;
-    type Error = PioDshotChannelError;
+// impl MotorChannel for PioDshotChannel {
+//     type Telemetry = DshotTelemetry;
+//     type Error = PioDshotChannelError;
+//
+//     fn set_throttle(&mut self, throttle: f32) -> Result<(), Self::Error> {
+//         let throttle = throttle_to_dshot_value(throttle);
+//
+//         let frame = create_dshot_frame(throttle, true);
+//         self.sm.push_tx((frame as u32) << 16);
+//         Ok(())
+//     }
+//
+//     fn latest_telemetry(&mut self) -> Option<Self::Telemetry> {
+//         self.sm.read_telemetry()
+//     }
+//     fn esc_command(&mut self, cmd: u8) -> Result<(), Self::Error> {
+//         let frame = create_dshot_frame(cmd as u16, true);
+//         self.sm.push_tx((frame as u32) << 16);
+//         Ok(())
+//     }
+// }
 
-    fn set_throttle(&mut self, throttle: f32) -> Result<(), Self::Error> {
-        let throttle = throttle_to_dshot_value(throttle);
+pub struct PioEscDriver {
+    sm: MotorSm,
+}
 
-        let frame = create_dshot_frame(throttle, true);
-        self.sm.push_tx((frame as u32) << 16);
-        Ok(())
+impl EscDriver for PioEscDriver {
+    async fn send_frame(&mut self, frame: u16) {
+        self.sm.push_tx((frame as u32) << 16).await;
     }
 
-    fn latest_telemetry(&mut self) -> Option<Self::Telemetry> {
-        self.sm.read_telemetry()
-    }
-    fn esc_command(&mut self, cmd: u8) -> Result<(), Self::Error> {
-        let frame = create_dshot_frame(cmd as u16, true);
-        self.sm.push_tx((frame as u32) << 16);
-        Ok(())
+    async fn read_pair(&mut self) -> (u32, u32) {
+        (self.sm.read_word().await, self.sm.read_word().await)
     }
 }
 
-pub fn take_motor(b: &mut Rp2350Dev) -> Option<MotorPinConcrete> {
+pub fn take_esc_driver(b: &mut Rp2350Dev) -> Option<PioEscDriver> {
     let pio_program = pio_file!(
         "src/boards/rp2350/pio/bidir_dshot.pio",
         options(max_program_size = 32)
@@ -170,8 +147,8 @@ pub fn take_motor(b: &mut Rp2350Dev) -> Option<MotorPinConcrete> {
     config.fifo_join = embassy_rp::pio::FifoJoin::Duplex;
 
     // sm some fixen
-    let mut sm_variant = b.available_sm.pop_front()?;
-    sm_variant.init(&config, &pin_dshot);
+    let mut sm = b.available_sm.pop_front()?;
+    sm.init(&config, &pin_dshot);
 
-    Some(PioDshotChannel::new(sm_variant))
+    Some(PioEscDriver { sm })
 }

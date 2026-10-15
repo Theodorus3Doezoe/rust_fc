@@ -68,3 +68,11 @@ pub fn claim_link() -> Option<&'static EscLink> {
     }
     link
 }
+
+pub fn claimed_links() -> usize {
+    LINK_CNT.load(Ordering::Relaxed)
+}
+
+pub fn link_at(k: usize) -> Option<&'static EscLink> {
+    ESC_LINKS.get(k)
+}

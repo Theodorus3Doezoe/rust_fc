@@ -7,6 +7,7 @@ pub trait Frame {
     // type ServoPin;
     // type MotorPin: MotorChannel;
     type Mixer; // could make custom mixer trait 
+    const MOTOR_COUNT: usize;
 
     fn init(provider: &mut Self::Board) -> Self;
     fn apply(&mut self, throttle: f32, pid: Rates) -> FrameOutput;

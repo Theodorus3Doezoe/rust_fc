@@ -1,13 +1,13 @@
 use embassy_time::{Duration, Instant, Ticker};
 
 use crate::{
-    config::{ActiveBoard, Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
+    config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
     filters::gyro::GyroFilter,
     frames::v_copter::FrameOutput,
     state::{FailsafeAction, SYSTEM, State, SystemErrorFlags},
     sync::{AtomicF32, AtomicRates, ImuProducer},
-    types::{ImuBurst, Rates},
+    types::Rates,
 };
 
 #[embassy_executor::task]
@@ -95,6 +95,17 @@ pub async fn rate_task(
 
                 let out = frame.apply(throttle.get(), pid);
 
+                let esc_telemetry = frame.read_telemetry();
+
+                for (i, t) in esc_telemetry.iter().enumerate() {
+                    // notch filter apply
+                    if let Some(tele) = t {
+                        todo!();
+                        // tele.erpm -> Hz -> notch-slot i updaten
+                    }
+                    todo!();
+                }
+
                 telemetry = Some((sp, pid, out));
             }
             State::Disarmed | State::Init => {
@@ -148,7 +159,7 @@ pub async fn rate_task(
                         out.actuators.motor_left_throttle,
                         out.actuators.motor_right_throttle,
                     );
-                    defmt::info!("[ESC] ML {:?} | MR {:?}", esc_telemetry[0], esc_telemetry[1]);
+                    defmt::info!("[ESC] {:?}", esc_telemetry);
                 }
                 None => {
                     defmt::info!(
@@ -158,7 +169,11 @@ pub async fn rate_task(
                         SYSTEM.get_state(),
                         defmt::Debug2Format(&SYSTEM.get_arm_errors())
                     );
-                    defmt::info!("[ESC] ML {:?} | MR {:?}", esc_telemetry[0], esc_telemetry[1]);
+                    defmt::info!(
+                        "[ESC] ML {:?} | MR {:?}",
+                        esc_telemetry[0],
+                        esc_telemetry[1]
+                    );
                 }
             }
         }

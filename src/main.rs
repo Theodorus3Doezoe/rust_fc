@@ -21,12 +21,16 @@ mod types;
 use embassy_executor::Spawner;
 
 use crate::{
+    actuators::{
+        dshot::state::{claimed_links, link_at},
+        provider::ActuatorProvider,
+    },
     state::{SYSTEM, State},
     sync::{AtomicF32, AtomicRates, ImuQueue},
-    tasks::attitude::attitude_task,
-    tasks::rate::rate_task,
-    tasks::rx::receiver_task,
-    tasks::usb::usb_task,
+    tasks::{
+        attitude::attitude_task, esc_telemetry::esc_task, rate::rate_task, rx::receiver_task,
+        usb::usb_task,
+    },
 };
 
 use heapless::spsc::Queue;
@@ -39,7 +43,13 @@ static RATE_SETPOINTS: AtomicRates = AtomicRates::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let platform = platform::Platform::init().await;
+    let mut platform = platform::Platform::init().await;
+
+    for k in 0..claimed_links() {
+        let driver = platform.board.take_esc_driver().unwrap();
+        let link = link_at(k).unwrap();
+        spawner.spawn(esc_task(link, driver).unwrap());
+    }
 
     let queue = IMU_QUEUE.init(Queue::new());
     let (producer, consumer) = queue.split();
