@@ -46,4 +46,4 @@ v_copter → MotorController<C> → MotorChannel (trait, f32 0..1)
 
 ## Status (13 okt)
 - Klaar (fase A, gecommit): generieke `MotorChannel` (f32) + `MotorController`; `PioDshotChannel` op de nieuwe trait; 0 = stop; `esc_command`.
-- Fase B gestart: stap 1 = `EscLink` in `state.rs`; zie `temp/todo.md` sectie 2.
+- Fase B: stap 1 (`EscLink` + `claim_link`) klaar; volgende stap = `driver.rs`. Zie `temp/todo.md` sectie 2.

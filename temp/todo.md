@@ -12,9 +12,9 @@
 - [x] `dshot_pio.rs`: `esc_command` (shift `<< 16`) + helper gebruikt
 
 ## 2. Fase B (eindvorm)
-- [ ] `dshot/state.rs`: `EscLink` (`Signal<u16>` + 3× `AtomicU32`: raw + erpm + periode) + statics + `claim_link()`; `latest()` geeft `Option<DshotTelemetry>`
-- [ ] `dshot/driver.rs`: `EscDriver` trait (async `send_frame`, `read_pair`)
-- [ ] `dshot/dshot_channel.rs`: `DshotChannel { link }` impl `MotorChannel` (encode + telemetrie via link)
+- [x] `dshot/state.rs`: `EscLink` (`Signal<u16>` + 3× `AtomicU32`: raw + erpm + periode) + statics + `claim_link()`; `latest()` geeft `Option<DshotTelemetry>`
+- [x] `dshot/driver.rs`: `EscDriver` trait (async `send_frame`, `read_pair`)
+- [x] `dshot/dshot_channel.rs`: `DshotChannel { link }` impl `MotorChannel` (encode + telemetrie via link)
 - [ ] board: `PioEscDriver { sm }` impl `EscDriver` + `type Esc` op de provider + `take_motor_drivers()`
 - [ ] `actuators/provider.rs`: `ActuatorProvider` uit `boards/`; default `take_motor` koppelt de link (`claim_link`), board levert alleen ruwe SM via `take_motor_hardware`
 - [ ] `tasks/esc_telemetry.rs`: `link.wait → driver.send_frame → driver.read_pair → decode → link.publish`
