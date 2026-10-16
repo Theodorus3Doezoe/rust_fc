@@ -1,7 +1,8 @@
 use embassy_time::{Duration, Instant, Ticker};
 
+use crate::filters::rpm_filter::{self, RpmFilter};
 use crate::{
-    config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, RATE_FREQ_HZ, frame, imu},
+    config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, MOTOR_POLE_PAIRS, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
     filters::gyro::GyroFilter,
     frames::v_copter::FrameOutput,
@@ -9,7 +10,6 @@ use crate::{
     sync::{AtomicF32, AtomicRates, ImuProducer},
     types::Rates,
 };
-
 #[embassy_executor::task]
 pub async fn rate_task(
     mut imu: imu::Calibrated,
@@ -57,6 +57,10 @@ pub async fn rate_task(
     let mut rate_pids =
         RatePID::new(pid_conf_roll, pid_conf_pitch, pid_conf_yaw).expect("Pid config invalid");
 
+    const MOTORS: usize = <frame::Concrete as Frame>::MOTOR_COUNT;
+    const SLOTS: usize = MOTORS * rpm_filter::HARMONICS;
+    let mut rpm_filter = RpmFilter::<SLOTS>::new(RATE_FREQ_HZ as f32);
+
     let mut counter = 0.0;
     let mut total_duration_nanos: u64 = 0;
 
@@ -84,6 +88,12 @@ pub async fn rate_task(
         let _ = producer.enqueue(burst);
 
         let filtered_gyro = gyro_filter.apply(burst.gyro);
+        let esc_telemetry = frame.read_telemetry();
+        let hz: [Option<f32>; MOTORS] = core::array::from_fn(|i| {
+            esc_telemetry[i].map(|t| t.erpm as f32 / 60.0 / MOTOR_POLE_PAIRS)
+        });
+        rpm_filter.update(&hz);
+        let filtered_gyro = rpm_filter.apply(filtered_gyro);
 
         let mut telemetry: Option<(Rates, Rates, FrameOutput)> = None;
 
@@ -94,18 +104,6 @@ pub async fn rate_task(
                 let pid = rate_pids.update(sp, filtered_gyro, RATE_DT);
 
                 let out = frame.apply(throttle.get(), pid);
-
-                let esc_telemetry = frame.read_telemetry();
-
-                for (i, t) in esc_telemetry.iter().enumerate() {
-                    // notch filter apply
-                    if let Some(tele) = t {
-                        todo!();
-                        // tele.erpm -> Hz -> notch-slot i updaten
-                    }
-                    todo!();
-                }
-
                 telemetry = Some((sp, pid, out));
             }
             State::Disarmed | State::Init => {
@@ -123,8 +121,6 @@ pub async fn rate_task(
                 }
             }
         }
-
-        let esc_telemetry = frame.read_telemetry();
 
         total_duration_nanos += start.elapsed().as_nanos();
 
@@ -147,19 +143,16 @@ pub async fn rate_task(
                         pid
                     );
                     defmt::info!(
-                        "[ACT] Mix: [SL: {}, SR: {}], [ML_raw: {}, MR_Raw: {}, [ML: {}, MR: {}] -> Servos: [L: {}µs, R: {}µs] -> Motors: [L: {}, R:{}]",
+                        "[ACT] Mix: [SL: {}, SR: {}],  -> Servos: [L: {}µs, R: {}µs] -> Motors: [L: {}, R:{}]",
                         out.mixer.servo_left,
                         out.mixer.servo_right,
-                        out.actuators.ml_raw_to_dshot,
-                        out.actuators.mr_raw_to_dshot,
-                        out.mixer.motor_left,
-                        out.mixer.motor_right,
                         out.actuators.servo_left_us,
                         out.actuators.servo_right_us,
                         out.actuators.motor_left_throttle,
                         out.actuators.motor_right_throttle,
                     );
                     defmt::info!("[ESC] {:?}", esc_telemetry);
+                    defmt::info!("[NOTCH] {:?}", hz);
                 }
                 None => {
                     defmt::info!(
@@ -174,6 +167,8 @@ pub async fn rate_task(
                         esc_telemetry[0],
                         esc_telemetry[1]
                     );
+
+                    defmt::info!("[NOTCH] {:?}", hz);
                 }
             }
         }

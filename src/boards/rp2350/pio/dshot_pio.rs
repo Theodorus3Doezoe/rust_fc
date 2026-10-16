@@ -2,6 +2,7 @@
 use crate::actuators::dshot::driver::EscDriver;
 
 use crate::boards::rp2350::Rp2350Dev;
+use crate::config::DSHOT_SPEED_HZ;
 use embassy_rp::gpio::Pull;
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::program::pio_file;
@@ -112,7 +113,7 @@ pub fn take_esc_driver(b: &mut Rp2350Dev) -> Option<PioEscDriver> {
         "src/boards/rp2350/pio/bidir_dshot.pio",
         options(max_program_size = 32)
     );
-    let dshot_speed = 600_000;
+    let dshot_speed = DSHOT_SPEED_HZ;
     let target_hz = dshot_speed * 40;
     let clock = embassy_rp::pio_programs::clock_divider::calculate_pio_clock_divider(target_hz);
 

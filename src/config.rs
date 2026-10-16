@@ -53,3 +53,6 @@ pub const GYRO_FILTER_CUTOFF_HZ: f32 = 80.0;
 pub const ATTITUDE_FREQ_HZ: u16 = 1_000;
 
 pub const SERVO_FREQ_HZ: u32 = 250;
+pub const DSHOT_SPEED_HZ: u32 = 600_000;
+pub const MOTOR_POLE_PAIRS: f32 = 7.0;
+pub const MOTOR_COUNT: usize = <frame::Concrete as Frame>::MOTOR_COUNT;

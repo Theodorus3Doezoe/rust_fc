@@ -60,7 +60,7 @@ impl SystemState {
     pub const fn new() -> Self {
         Self {
             system_state: AtomicU8::new(State::Init as u8),
-            flight_mode: AtomicU8::new(FlightMode::Angle as u8),
+            flight_mode: AtomicU8::new(FlightMode::Rate as u8),
             arm_errors: AtomicU16::new(ArmBlockFlags::CALIBRATING.bits()),
             system_errors: AtomicU16::new(0),
             failsafe: AtomicU16::new(FailsafeAction::None as u16),
