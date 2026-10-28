@@ -5,7 +5,7 @@ use crate::{
     config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, MOTOR_POLE_PAIRS, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
     filters::gyro::GyroFilter,
-    frames::v_copter::FrameOutput,
+    frames::FrameOutput,
     state::{FailsafeAction, SYSTEM, State, SystemErrorFlags},
     sync::{AtomicF32, AtomicRates, ImuProducer},
     types::Rates,
@@ -92,7 +92,9 @@ pub async fn rate_task(
         let hz: [Option<f32>; MOTORS] = core::array::from_fn(|i| {
             esc_telemetry[i].map(|t| t.erpm as f32 / 60.0 / MOTOR_POLE_PAIRS)
         });
+
         rpm_filter.update(&hz);
+
         let filtered_gyro = rpm_filter.apply(filtered_gyro);
 
         let mut telemetry: Option<(Rates, Rates, FrameOutput)> = None;
@@ -142,16 +144,12 @@ pub async fn rate_task(
                         sp,
                         pid
                     );
-                    defmt::info!(
-                        "[ACT] Mix: [SL: {}, SR: {}],  -> Servos: [L: {}µs, R: {}µs] -> Motors: [L: {}, R:{}]",
-                        out.mixer.servo_left,
-                        out.mixer.servo_right,
-                        out.actuators.servo_left_us,
-                        out.actuators.servo_right_us,
-                        out.actuators.motor_left_throttle,
-                        out.actuators.motor_right_throttle,
-                    );
-                    defmt::info!("[ESC] {:?}", esc_telemetry);
+                    for i in 0..out.motor_count {
+                        defmt::info!("[ACT] M{}: {}", i, out.motors[i as usize]);
+                    }
+                    for i in 0..out.servo_count {
+                        defmt::info!("[ACT] S{}: {}µs", i, out.servo_us[i as usize]);
+                    }
                     defmt::info!("[NOTCH] {:?}", hz);
                 }
                 None => {

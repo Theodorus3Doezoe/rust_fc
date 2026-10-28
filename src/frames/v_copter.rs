@@ -26,28 +26,12 @@ pub struct ActuatorOutput {
     pub motor_right_throttle: u16,
 }
 
-pub struct FrameOutput {
-    pub mixer: BicopterOutput,
-    pub actuators: ActuatorOutput,
-}
-
-impl VCopterFrame<ServoPin, MotorPin> {
-    pub fn read_telemetry(
-        &mut self,
-    ) -> [Option<frame::DshotTelemetry>; <Self as Frame>::MOTOR_COUNT] {
-        [
-            self.motor_left.latest_telemetry(),
-            self.motor_right.latest_telemetry(),
-        ]
-    }
-}
-
 impl Frame for VCopterFrame<ServoPin, MotorPin> {
     type Board = ActiveBoard;
     // type ServoPin = B::ServoPin;
     // type MotorPin = B::MotorPin;
-    type Mixer = self::BiCopMixer;
     const MOTOR_COUNT: usize = 2;
+    type Telemetry = frame::DshotTelemetry;
 
     fn init(provider: &mut Self::Board) -> Self {
         let left_servo_pin = provider
@@ -74,7 +58,7 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
             motor_left: motor::MotorController::new(left_motor_pin, true),
             motor_right: motor::MotorController::new(right_motor_pin, false),
             // temp hard coded
-            mixer: bi_copter::BiCopMixer::init(5.0, 0.0, 0.0),
+            mixer: bi_copter::BiCopMixer::init(0.0, 0.0),
         }
     }
 
@@ -106,9 +90,18 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
 
         //for telemetry
         FrameOutput {
-            mixer: mixer_out,
-            actuators: info,
+            motors: [mixer_out.motor_left, mixer_out.motor_right, 0.0, 0.0],
+            motor_count: 2,
+            servo_us: [servo_left_us, servo_right_us, 0, 0],
+            servo_count: 2,
         }
+    }
+
+    fn read_telemetry(&mut self) -> heapless::Vec<Option<Self::Telemetry>, MAX_MOTORS> {
+        let mut v = heapless::Vec::new();
+        let _ = v.push(self.motor_left.latest_telemetry());
+        let _ = v.push(self.motor_right.latest_telemetry());
+        v
     }
 
     fn stop_all(&mut self) {
@@ -118,21 +111,6 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         self.motor_left.apply(0.0);
         self.motor_right.apply(0.0);
     }
-
-    // async fn arm_motor(&mut self) {
-    //     let idle_throttle = self.mixer.get_idle_throttle();
-    //     let idle_dshot = mixer_to_dshot_throttle(idle_throttle);
-    //     self.motor_left.apply(0);
-    //     self.motor_right.apply(0);
-    //     Timer::after(Duration::from_millis(300)).await;
-    //     // send idle throttle
-    //     self.motor_left.apply(idle_dshot);
-    //     self.motor_right.apply(idle_dshot);
-    //     Timer::after(Duration::from_millis(500)).await;
-    //     self.motor_left.apply(0);
-    //     self.motor_right.apply(0);
-    //     Timer::after(Duration::from_millis(300)).await;
-    // }
 
     async fn set_direction(&mut self, permanent: bool) {
         let cmd_left = if self.motor_left.cw { 7 } else { 8 };

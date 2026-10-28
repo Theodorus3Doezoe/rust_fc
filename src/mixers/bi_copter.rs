@@ -1,10 +1,7 @@
-use crate::types::Rates;
+use crate::mixers::{desaturate_motors, desaturate_servos};
+use crate::{config::MOTOR_IDLE, mixers::Mixer, types::Rates};
 
-pub struct BiCopMixer {
-    idle_throttle: f32,
-    servo_left_offset: f32,
-    servo_right_offset: f32,
-}
+pub struct BiCopMixer {}
 
 pub struct BicopterOutput {
     pub servo_left: f32, // -1.0 .. 1.0 rads
@@ -13,13 +10,29 @@ pub struct BicopterOutput {
     pub motor_right: f32,
 }
 
-impl BiCopMixer {
-    pub const fn init(idle_throttle: f32, servo_left_offset: f32, servo_right_offset: f32) -> Self {
-        Self {
-            idle_throttle: idle_throttle / 100.0,
-            servo_left_offset,
-            servo_right_offset,
+impl Mixer for BiCopMixer {
+    type Output = BicopterOutput;
+    fn mix(&self, throttle: f32, pid: Rates) -> Self::Output {
+        let servo_left = pid.pitch + pid.yaw;
+        let servo_right = pid.pitch - pid.yaw;
+        let [servo_left, servo_right] = desaturate_servos([servo_left, servo_right]);
+
+        let motor_left = throttle + pid.roll;
+        let motor_right = throttle - pid.roll;
+        let [motor_left, motor_right] = desaturate_motors([motor_left, motor_right]);
+
+        BicopterOutput {
+            servo_left,
+            servo_right,
+            motor_left,
+            motor_right,
         }
+    }
+}
+
+impl BiCopMixer {
+    pub const fn init(servo_left_offset: f32, servo_right_offset: f32) -> Self {
+        Self {}
     }
 
     // calibrate function?
@@ -51,13 +64,13 @@ impl BiCopMixer {
         }
 
         let m_min = motor_left.min(motor_right);
-        if m_min < self.idle_throttle {
-            motor_left += self.idle_throttle - m_min;
-            motor_right += self.idle_throttle - m_min;
+        if m_min < MOTOR_IDLE {
+            motor_left += MOTOR_IDLE - m_min;
+            motor_right += MOTOR_IDLE - m_min;
         }
 
-        motor_left = motor_left.clamp(self.idle_throttle, 1.0);
-        motor_right = motor_right.clamp(self.idle_throttle, 1.0);
+        motor_left = motor_left.clamp(MOTOR_IDLE, 1.0);
+        motor_right = motor_right.clamp(MOTOR_IDLE, 1.0);
 
         BicopterOutput {
             servo_left,
@@ -65,9 +78,5 @@ impl BiCopMixer {
             motor_left,
             motor_right,
         }
-    }
-
-    pub fn get_idle_throttle(&self) -> f32 {
-        self.idle_throttle
     }
 }

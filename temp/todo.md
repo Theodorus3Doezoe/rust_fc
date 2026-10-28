@@ -46,3 +46,24 @@
 - [ ] IMU mount: vaste rotatie (board-alignment) of fysiek draaien — Euler 149°/36° terwijl board plat ligt
 - [ ] `[ACT]`-log: stale velden (`ML_raw`, `Motors [L, R]`) tonen 0 terwijl de mixer waarden stuurt
 - [ ] tuning: param-commando's via USB (bank) → daarna ESB-dongle + RAM-blackbox + dynamic notch
+
+## Actueel plan – testvlucht (28 okt, samen afgaan)
+Doel: eerst build groen, dan tri-frame, dan ELRS. Dit lijstje werken we samen af.
+
+### A. Build groen (klaar, alleen warnings over)
+- [x] `src/frames/v_copter.rs`: `apply()` ombouwen naar nieuwe `FrameOutput {motors, motor_count, servo_us, servo_count}` (nu nog oude `{mixer, actuators}`)
+- [x] `src/tasks/rate.rs:149-154`: logging ombouwen naar nieuwe `FrameOutput`-velden
+- [x] `cargo check` schoon (nu 8x E0609/E0560)
+- [ ] warnings weg: `tri_copter.rs:10-11` unused imports, `rx.rs:50` unused `e`, `calibrated_imu.rs:36` unused `i`
+
+### B. Tri-frame (klaar, alleen warnings + ActiveFrame-switch open)
+- [x] `src/frames/tri_copter.rs`: rename `VCopterFrame` → `TriCopterFrame`, `MOTOR_COUNT 2 → 3`
+- [x] `apply/read_telemetry/stop_all/set_direction` implementeren (nu `todo!()`)
+- [ ] `config.rs`: `ActiveFrame` op tri zetten voor test
+- [ ] bench zonder props: arm → `[ESC] ML ~95%+`, disarm = stop, failsafe bij RX-verlies
+
+### C. ELRS (als A+B klaar)
+- [ ] LilyGO TTGO LoRa32 868 SX1276 flashen als DIY Custom ESP 900MHz RX (EU868, zelfde versie + phrase als JR-module)
+- [ ] Pinmapping: SCK 5, MISO 19, MOSI 27, CS 18, RST 23, DIO0 26, DIO1 33 (V1.x: RST 14)
+- [ ] Nieuw `src/receiver/crsf.rs` (420kbaud CRSF-parser als `Receiver`-impl) + UART op RP2350 + `receiver::Concrete` omzetten
+- [ ] USB vrijmaken voor tuning/telemetrie: `FromPc SetPid(2)/SetFilter(3)` + `ToPc` implementeren

@@ -46,6 +46,8 @@ class SerialInterface:
         self.rx_count = 0
         self.tx_count = 0
         self.error_count = 0
+        self._rx_thread: Optional[threading.Thread] = None
+        self._tx_thread: Optional[threading.Thread] = None
 
         # State storage
         self.latest_attitude: Optional[Attitude] = Attitude(0.0, 0.0, 0.0)
@@ -192,10 +194,12 @@ class SerialInterface:
         if self.sim:
             self.log("Starting in SIMULATION mode...")
             self.is_connected = True
-            threading.Thread(target=self._sim_worker, daemon=True).start()
+            self._rx_thread = threading.Thread(target=self._sim_worker, daemon=True)
         else:
-            threading.Thread(target=self._serial_worker, daemon=True).start()
-        threading.Thread(target=self._rc_tx_loop, daemon=True).start()
+            self._rx_thread = threading.Thread(target=self._serial_worker, daemon=True)
+        self._rx_thread.start()
+        self._tx_thread = threading.Thread(target=self._rc_tx_loop, daemon=True)
+        self._tx_thread.start()
 
     def _rc_tx_loop(self):
         """Continuously transmits `RcChannels` packets at 100Hz (every 10ms) to the Flight Controller."""
@@ -235,12 +239,22 @@ class SerialInterface:
                 self.log(f"[TX RC STREAM] {lbl} thr={throttle:.2f} r={roll:+.2f} p={pitch:+.2f} y={yaw:+.2f}")
 
     def stop(self):
+        # Stop the workers *before* closing the port. A closed pyserial handle
+        # has fd=None, so a concurrent read() would raise
+        # "TypeError: 'NoneType' object cannot be interpreted as an integer".
         self.running = False
-        if self.ser and self.ser.is_open:
+        for thread in (self._rx_thread, self._tx_thread):
+            if thread and thread.is_alive():
+                thread.join(timeout=1.0)
+        self._rx_thread = None
+        self._tx_thread = None
+        if self.ser:
             try:
-                self.ser.close()
+                if self.ser.is_open:
+                    self.ser.close()
             except Exception:
                 pass
+        self.ser = None
         self.is_connected = False
 
     def change_device(self, target: str):
@@ -342,8 +356,13 @@ class SerialInterface:
                     time.sleep(2.0)
                     continue
 
+            ser = self.ser
+            if ser is None or not ser.is_open:
+                time.sleep(0.05)
+                continue
+
             try:
-                raw = self.ser.read(64)
+                raw = ser.read(64)
                 if raw:
                     buf.extend(raw)
                     while buf:

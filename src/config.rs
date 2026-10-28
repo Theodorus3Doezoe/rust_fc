@@ -1,11 +1,11 @@
 // pub use crate::boards::{Board, rp2350dev::Rp2350Dev};
 pub use crate::boards::*;
-pub use crate::frames::{Frame, v_copter::VCopterFrame};
+pub use crate::frames::{Frame, tri_copter::TriCopterFrame, v_copter::VCopterFrame};
 pub use crate::sensors::{Imu, mpu6500::Mpu6500};
 
 pub type ActiveBoard = rp2350::Rp2350Dev;
 pub type SelectedImuDriver<SPI> = Mpu6500<SPI>;
-pub type ActiveFrame<P, M> = VCopterFrame<P, M>;
+pub type ActiveFrame<P, M> = TriCopterFrame<P, M>;
 
 // pub type ActiveTelemetry = usb::UsbTx;
 //
@@ -56,3 +56,4 @@ pub const SERVO_FREQ_HZ: u32 = 250;
 pub const DSHOT_SPEED_HZ: u32 = 600_000;
 pub const MOTOR_POLE_PAIRS: f32 = 7.0;
 pub const MOTOR_COUNT: usize = <frame::Concrete as Frame>::MOTOR_COUNT;
+pub const MOTOR_IDLE: f32 = 0.07;
