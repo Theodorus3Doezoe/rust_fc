@@ -21,11 +21,11 @@ pub async fn receiver_task(
                 throttle_atomic.set(data.throttle);
                 pilot_input.set(data.rates);
 
-                if data.disarm {
+                if !data.armed {
                     SYSTEM.set_state(State::Disarmed);
                     arm_start = None;
                     defmt::info!("System disarmed");
-                } else if data.arm && data.throttle < 0.05 {
+                } else if data.armed && data.throttle < 0.05 {
                     match arm_start {
                         Some(start) => {
                             if start.elapsed() >= arm_timer {

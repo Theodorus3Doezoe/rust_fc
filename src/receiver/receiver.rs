@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct RcChannels {
     pub rates: Rates,
     pub throttle: f32,
-    pub arm: bool,
-    pub disarm: bool,
+    pub armed: bool,
     pub mode: FlightMode,
 }
 
