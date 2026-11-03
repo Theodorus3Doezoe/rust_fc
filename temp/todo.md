@@ -56,10 +56,10 @@ Doel: eerst build groen, dan tri-frame, dan ELRS. Dit lijstje werken we samen af
 - [x] `cargo check` schoon (nu 8x E0609/E0560)
 - [ ] warnings weg: `tri_copter.rs:10-11` unused imports, `rx.rs:50` unused `e`, `calibrated_imu.rs:36` unused `i`
 
-### B. Tri-frame (klaar, alleen warnings + ActiveFrame-switch open)
+### B. Tri-frame (code klaar, bench-test open)
 - [x] `src/frames/tri_copter.rs`: rename `VCopterFrame` → `TriCopterFrame`, `MOTOR_COUNT 2 → 3`
 - [x] `apply/read_telemetry/stop_all/set_direction` implementeren (nu `todo!()`)
-- [ ] `config.rs`: `ActiveFrame` op tri zetten voor test
+- [x] `config.rs`: `ActiveFrame` op tri zetten voor test
 - [ ] bench zonder props: arm → `[ESC] ML ~95%+`, disarm = stop, failsafe bij RX-verlies
 
 ### C. ELRS (bezig)
@@ -68,7 +68,7 @@ Doel: eerst build groen, dan tri-frame, dan ELRS. Dit lijstje werken we samen af
 - [x] RcChannels: `arm/disarm` → één `armed: bool`, `rx.rs` mee omgezet
 - [x] Board-UART: `UartRead`/`UartWrite`-traits, UART0/PIN_0/PIN_1 + DMA_CH2/CH3, `take_crsf_uart()` met `split()` (tx geparkeerd voor later)
 - [x] `uart.rs`: trait-impls voor `UartTx`/`UartRx`-helften (`cargo check` weer groen)
-- [ ] `src/receiver/crsf.rs`: module aangemaakt (leeg) — parser nog implementeren (sync 0xC8, len, type 0x16, CRC8-D5, 16x11-bit → `RcChannels`)
-- [ ] `receiver::Concrete` omzetten naar CRSF + wiring in `platform.rs`
+- [x] `src/receiver/crsf.rs`: parser met `crsf`-crate (`PacketParser`, `RcChannels`-mapping, `CrsfError`) — `cargo check` groen
+- [x] `receiver::Concrete` omzetten naar CRSF + wiring in `platform.rs` (tx-helft geparkeerd in `Platform`)
 - [ ] USB-gelijk trekken (nu nog oud): `usb_receiver.rs` + `tools/postcard_codec.py` + `usb_tui.py` naar `armed`
 - [ ] USB vrijmaken voor tuning/telemetrie: `FromPc SetPid(2)/SetFilter(3)` + `ToPc` implementeren

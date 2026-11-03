@@ -13,6 +13,7 @@ pub struct Platform {
     pub frame: frame::Concrete,
     pub usb_dev: usb::UsbDev,
     pub rx: receiver::Concrete,
+    pub crsf_tx: <ActiveBoard as Board>::CrsfTx,
 }
 
 impl Platform {
@@ -51,7 +52,8 @@ impl Platform {
 
         let usb_dev = usb::UsbManager::init(usb_driver);
 
-        let rx = receiver::Concrete::init();
+        let (crsf_tx, crsf_rx) = board.take_crsf_uart();
+        let rx = crate::receiver::crsf::CrsfReceiver::new(crsf_rx);
         // let tx = telemetry::Concrete::init();
 
         Self {
@@ -60,6 +62,7 @@ impl Platform {
             frame,
             usb_dev,
             rx,
+            crsf_tx,
         }
     }
 }

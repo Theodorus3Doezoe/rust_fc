@@ -35,7 +35,11 @@ pub mod frame {
 }
 
 pub mod receiver {
-    pub type Concrete = crate::receiver::usb_receiver::UsbReceiver;
+    use super::*;
+    use crate::boards::Board;
+    use crate::receiver::crsf::CrsfReceiver;
+
+    pub type Concrete = CrsfReceiver<<ActiveBoard as Board>::CrsfRx>;
 }
 pub mod esc {
     use super::*;
