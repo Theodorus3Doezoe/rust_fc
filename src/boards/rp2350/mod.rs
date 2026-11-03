@@ -2,6 +2,7 @@ pub mod imu_spi;
 pub mod pins;
 pub mod pio;
 pub mod servo_pwm;
+pub mod uart;
 pub mod usb;
 
 use super::{ActuatorProvider, Board};
