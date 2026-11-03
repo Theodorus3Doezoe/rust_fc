@@ -65,8 +65,10 @@ Doel: eerst build groen, dan tri-frame, dan ELRS. Dit lijstje werken we samen af
 ### C. ELRS (bezig)
 - [ ] LilyGO TTGO LoRa32 868 SX1276 flashen als DIY Custom ESP 900MHz RX (EU868, zelfde versie + phrase als JR-module)
 - [ ] Pinmapping: SCK 5, MISO 19, MOSI 27, CS 18, RST 23, DIO0 26, DIO1 33 (V1.x: RST 14)
-- [x] `RcChannels`: `arm/disarm` → één `armed: bool`, `rx.rs` mee omgezet
+- [x] RcChannels: `arm/disarm` → één `armed: bool`, `rx.rs` mee omgezet
+- [x] Board-UART: `UartRead`/`UartWrite`-traits, UART0/PIN_0/PIN_1 + DMA_CH2/CH3, `take_crsf_uart()` met `split()` (tx geparkeerd voor later)
+- [ ] `uart.rs`: trait-impls voor `UartTx`/`UartRx`-helften (nog 2 errors in `cargo check`)
 - [ ] `src/receiver/crsf.rs`: module aangemaakt (leeg) — parser nog implementeren (sync 0xC8, len, type 0x16, CRC8-D5, 16x11-bit → `RcChannels`)
-- [ ] UART op RP2350 + `receiver::Concrete` omzetten naar CRSF
+- [ ] `receiver::Concrete` omzetten naar CRSF + wiring in `platform.rs`
 - [ ] USB-gelijk trekken (nu nog oud): `usb_receiver.rs` + `tools/postcard_codec.py` + `usb_tui.py` naar `armed`
 - [ ] USB vrijmaken voor tuning/telemetrie: `FromPc SetPid(2)/SetFilter(3)` + `ToPc` implementeren

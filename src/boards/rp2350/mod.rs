@@ -7,11 +7,15 @@ pub mod usb;
 use super::{ActuatorProvider, Board};
 use embassy_rp::dma::InterruptHandler as DmaInterruptHandler;
 use embassy_rp::gpio::Output;
-use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, SPI0};
+use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, SPI0, UART0};
 use embassy_rp::peripherals::{PIO0, USB};
 use embassy_rp::pio::{Common, InterruptHandler as PioHandler, LoadedProgram, Pio};
 use embassy_rp::pwm::PwmOutput;
 use embassy_rp::spi::{Async, Spi};
+use embassy_rp::uart::{
+    Async as UartAsync, Config as UartConfig, Error, InterruptHandler as UartInterruptHandler,
+    Uart, UartRx, UartTx,
+};
 use embassy_rp::usb::{Driver as RpUsbDriver, InterruptHandler as UsbInterruptHandler};
 use embassy_rp::{Peri, bind_interrupts};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
@@ -27,6 +31,7 @@ bind_interrupts!(pub struct Irqs {
                  DmaInterruptHandler<DMA_CH3>;
     PIO0_IRQ_0 => PioHandler<PIO0>;
     USBCTRL_IRQ => UsbInterruptHandler<USB>;
+    UART0_IRQ => UartInterruptHandler<UART0>;
 });
 //Type aliases
 pub type PwmPinConcrete = PwmOutput<'static>;
@@ -42,11 +47,14 @@ pub struct Rp2350Dev {
     pub available_sm: Deque<MotorSm, 4>,
     pub pio_common: Common<'static, PIO0>,
     pub motor_program: Option<LoadedProgram<'static, PIO0>>,
+    crsf_uart: Option<Uart<'static, UartAsync>>,
 }
 
 impl Board for Rp2350Dev {
     type ImuSpi = ImuConcrete;
     type UsbDriver = RpUsbDriver<'static, USB>;
+    type CrsfTx = UartTx<'static, UartAsync>;
+    type CrsfRx = UartRx<'static, UartAsync>;
 
     fn init() -> Self {
         let p = embassy_rp::init(Default::default());
@@ -95,6 +103,20 @@ impl Board for Rp2350Dev {
         available_sm.push_back(MotorSm::Sm3(sm3));
 
         let usb_driver = usb::create_usb(p.USB, Irqs);
+
+        // uart crsf
+        let mut uart_config = UartConfig::default();
+        uart_config.baudrate = 420_000;
+        let crsf_uart = Uart::new(
+            p.UART0,
+            p.PIN_0,
+            p.PIN_1,
+            Irqs,
+            p.DMA_CH2,
+            p.DMA_CH3,
+            uart_config,
+        );
+
         Self {
             imu_spi: Some(imu_spi_device),
             available_slices,
@@ -104,6 +126,7 @@ impl Board for Rp2350Dev {
             available_sm,
             pio_common: common,
             motor_program: None,
+            crsf_uart: Some(crsf_uart),
         }
     }
 
@@ -113,6 +136,10 @@ impl Board for Rp2350Dev {
 
     fn take_usb_driver(&mut self) -> Self::UsbDriver {
         self.usb_driver.take().unwrap()
+    }
+
+    fn take_crsf_uart(&mut self) -> (Self::CrsfTx, Self::CrsfRx) {
+        self.crsf_uart.take().unwrap().split()
     }
 }
 
