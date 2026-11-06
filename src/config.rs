@@ -61,3 +61,28 @@ pub const DSHOT_SPEED_HZ: u32 = 600_000;
 pub const MOTOR_POLE_PAIRS: f32 = 7.0;
 pub const MOTOR_COUNT: usize = <frame::Concrete as Frame>::MOTOR_COUNT;
 pub const MOTOR_IDLE: f32 = 0.07;
+
+pub mod pid {
+    pub struct PidGains {
+        pub kp: f32,
+        pub ki: f32,
+        pub kd: f32,
+    }
+
+    pub const ROLL: PidGains = PidGains {
+        kp: 0.15,
+        ki: 0.0,
+        kd: 0.005,
+    };
+    pub const PITCH: PidGains = PidGains {
+        kp: 0.15,
+        ki: 0.0,
+        kd: 0.005,
+    };
+    pub const YAW: PidGains = PidGains {
+        kp: 0.25,
+        ki: 0.0,
+        kd: 0.0,
+    };
+    pub const I_LIMIT: f32 = 30.0;
+}

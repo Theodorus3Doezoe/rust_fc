@@ -1,6 +1,7 @@
 use embassy_time::{Duration, Instant, Ticker};
 
 use crate::filters::rpm_filter::{self, RpmFilter};
+use crate::sync::AtomicPid;
 use crate::{
     config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, MOTOR_POLE_PAIRS, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
@@ -10,6 +11,8 @@ use crate::{
     sync::{AtomicF32, AtomicRates, ImuProducer},
     types::Rates,
 };
+
+use crate::sync::{PID_VALS, PITCH_AXIS, ROLL_AXIS, YAW_AXIS};
 #[embassy_executor::task]
 pub async fn rate_task(
     mut imu: imu::Calibrated,
@@ -22,40 +25,9 @@ pub async fn rate_task(
     let mut gyro_filter = GyroFilter::new(RATE_FREQ_HZ as f32, GYRO_FILTER_CUTOFF_HZ);
     const RATE_DT: f32 = 1.0 / RATE_FREQ_HZ as f32;
 
-    // rate freq hz shouldn't have to be set 3 times
-    // implement helper for gains
-    let pid_conf_roll = PidConfig {
-        kp: 0.15,
-        ki: 0.00,
-        kd: 0.005,
-        i_limit: 30.0,
-        dterm_cutoff_lpf1_hz: 150.0,
-        dterm_cutoff_lpf2_hz: 250.0,
-        dterm_sample_rate: RATE_FREQ_HZ as f32,
-    };
-
-    let pid_conf_pitch = PidConfig {
-        kp: 0.15,
-        ki: 0.00,
-        kd: 0.005,
-        i_limit: 30.0,
-        dterm_cutoff_lpf1_hz: 150.0,
-        dterm_cutoff_lpf2_hz: 250.0,
-        dterm_sample_rate: RATE_FREQ_HZ as f32,
-    };
-
-    let pid_conf_yaw = PidConfig {
-        kp: 0.25,
-        ki: 0.0,
-        kd: 0.0,
-        i_limit: 30.0,
-        dterm_cutoff_lpf1_hz: 150.0,
-        dterm_cutoff_lpf2_hz: 250.0,
-        dterm_sample_rate: RATE_FREQ_HZ as f32,
-    };
-
+    let pid_conf = AtomicPid::pid_configs();
     let mut rate_pids =
-        RatePID::new(pid_conf_roll, pid_conf_pitch, pid_conf_yaw).expect("Pid config invalid");
+        RatePID::new(pid_conf[0], pid_conf[1], pid_conf[2]).expect("Pid config invalid");
 
     const MOTORS: usize = <frame::Concrete as Frame>::MOTOR_COUNT;
     const SLOTS: usize = MOTORS * rpm_filter::HARMONICS;
@@ -103,6 +75,12 @@ pub async fn rate_task(
             State::Armed => {
                 let sp = rate_setpoints.get();
 
+                let gains = [
+                    PID_VALS[ROLL_AXIS].get(),
+                    PID_VALS[PITCH_AXIS].get(),
+                    PID_VALS[YAW_AXIS].get(),
+                ];
+                rate_pids.set_all(gains);
                 let pid = rate_pids.update(sp, filtered_gyro, RATE_DT);
 
                 let out = frame.apply(throttle.get(), pid);

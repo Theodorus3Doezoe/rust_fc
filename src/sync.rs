@@ -1,13 +1,27 @@
 //types for Imu queue
-use crate::types::{ImuBurst, Rates};
-use core::sync::atomic::{AtomicU32, Ordering};
+use crate::{
+    config::{
+        RATE_FREQ_HZ,
+        pid::{self, I_LIMIT, PidGains},
+    },
+    controllers::pid_controller::PidConfig,
+    types::{ImuBurst, Rates},
+};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
 use heapless::spsc::{Consumer, Producer, Queue};
+
+pub static PING_SIGNAL: Signal<CriticalSectionRawMutex, (usize, [u8; 8])> = Signal::new();
 
 // queue for imu data
 pub const IMU_QUEUE_CAPACITY: usize = 16;
 pub type ImuQueue = Queue<ImuBurst, IMU_QUEUE_CAPACITY>;
 pub type ImuProducer = Producer<'static, ImuBurst>;
 pub type ImuConsumer = Consumer<'static, ImuBurst>;
+
+// atomic for tuning heartbeat
+pub static LAST_SMP: AtomicU32 = AtomicU32::new(0);
 
 pub struct AtomicF32(AtomicU32);
 
@@ -56,4 +70,79 @@ impl AtomicRates {
     }
 }
 
-// setpoints from sticks
+pub struct AtomicPid {
+    kp: AtomicF32,
+    ki: AtomicF32,
+    kd: AtomicF32,
+}
+
+// double with in config.rs and should be in types
+#[derive(Debug, Clone, Copy)]
+pub struct PidTune {
+    pub kp: f32,
+    pub ki: f32,
+    pub kd: f32,
+}
+
+impl AtomicPid {
+    pub const fn new(v: PidGains) -> Self {
+        Self {
+            kp: AtomicF32::new(v.kp),
+            ki: AtomicF32::new(v.ki),
+            kd: AtomicF32::new(v.kd),
+        }
+    }
+
+    pub fn set(&self, v: PidTune) {
+        self.kp.set(v.kp);
+        self.ki.set(v.ki);
+        self.kd.set(v.kd);
+    }
+
+    pub fn get(&self) -> PidTune {
+        PidTune {
+            kp: self.kp.get(),
+            ki: self.ki.get(),
+            kd: self.kd.get(),
+        }
+    }
+
+    pub fn pid_configs() -> [PidConfig; 3] {
+        let gains = [
+            PID_VALS[ROLL_AXIS].get(),
+            PID_VALS[PITCH_AXIS].get(),
+            PID_VALS[YAW_AXIS].get(),
+        ];
+        gains.map(|g| PidConfig {
+            kp: g.kp,
+            ki: g.ki,
+            kd: g.kd,
+            i_limit: I_LIMIT,
+            dterm_cutoff_lpf1_hz: FILTER_CUTOFFS[LPF1_CUTOFF].get(),
+            dterm_cutoff_lpf2_hz: FILTER_CUTOFFS[LPF2_CUTOFF].get(),
+            dterm_sample_rate: RATE_FREQ_HZ as f32,
+        })
+    }
+}
+pub const ROLL_AXIS: usize = 0;
+pub const PITCH_AXIS: usize = 1;
+pub const YAW_AXIS: usize = 2;
+
+// struct instead of array?
+pub static PID_VALS: [AtomicPid; 3] = [
+    AtomicPid::new(pid::ROLL),
+    AtomicPid::new(pid::PITCH),
+    AtomicPid::new(pid::YAW),
+];
+
+pub const GYRO_CUTOFF: usize = 0;
+pub const LPF1_CUTOFF: usize = 1;
+pub const LPF2_CUTOFF: usize = 2;
+
+pub static FILTER_CUTOFFS: [AtomicF32; 3] = [
+    AtomicF32::new(80.0),
+    AtomicF32::new(150.0),
+    AtomicF32::new(250.0),
+];
+
+pub static STREAM_ATOMICBOOL: AtomicBool = AtomicBool::new(false);

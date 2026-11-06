@@ -79,14 +79,17 @@ Let op: V1 → RST = GPIO14 (geen 23); laptop→TX-link draait op **921600** (ge
 
 ### D. Live tuning over ELRS extended frames (nieuw, vervangt USB-tuning als eerstvolgende)
 Ontwerp bewezen in source, contract vastgelegd. Regels: alleen disarmed + bench, Model Match uit, link vereist, 5 s-timeout als vangnet. Normaal vliegen = nul tuning-overhead.
-- [ ] `crsf.rs`: `next_raw_packet()` i.p.v. `next_packet()` (crate 2.0.1 kent `0x7A` niet)
-- [ ] `0x7A` parsen: `0x7F00` = postcard-tunnel (bestaande codec), `0x7F01`/`0x7F02` = stream aan/uit (opt 1 byte rate-Hz, default 10, clamp 1–10), `0x7F03` = ping (≤8B, echo via `0x7B`)
-- [ ] Let op: `SetFilter` is **3 floats** (gyro, lpf1, lpf2 — 12B na varint-3, f32LE), geen 2 meer; filter-statics dus 3× `AtomicF32`
-- [ ] `0x7B`-antwoorden + `0x1E`-attitude (RPY i16LE, rad×10000) de UART op via `platform.crsf_tx`
-- [ ] `0x7B`-antwoorden + `0x1E`-attitude (rad×10000, i16LE) de UART op via `platform.crsf_tx`
-- [ ] statics: ATTITUDE + STREAM als `AtomicBool` + 5 s-timeout; PID-gains als `AtomicF32`-statics
-- [ ] nieuwe `telemetry_task`; `receiver_task` blijft zoals hij is
-- [ ] verificatie-volgorde: ping heen-en-weer → attitude → PID-tuning → pas daarna bereik-test open veld
+- [x] `crsf.rs`: `next_raw_packet()` i.p.v. `next_packet()` + dispatch op type-byte (`0x16` via `from_raw`, rest negeren)
+- [x] `0x7A`: CRC-check handmatig (DVB-S2 over `data[2..len-1]`), sub-id als `u16`LE, `TuningCmd`-enum (`0x7F00–0x7F03`)
+- [x] `0x7F00`: postcard-tunnel — `TunMsg`-enum (`SetPid`/`SetFilter`, FC leidend, dashboard volgt); `Arm`/`Disarm` bestaan niet (armen loopt via CH9)
+- [x] gain-statics: `AtomicPid` + `PID_VALS[3]` + `FILTER_CUTOFFS[3]`, defaults uit `config::pid`; `SetPid`/`SetFilter`-armen schrijven ze weg
+- [x] rate-loop leest live mee: helper bouwt `PidConfig`s uit statics, `set_all()` per tick (iedere 8e tick mag ook)
+- [x] `0x7F03` ping: payload (≤8B, seq+timestamp+random door dashboard) → `Signal`-handoff voor echo
+- [x] `0x7F01`/`0x7F02`: STREAM-`AtomicBool` aan/uit (+ rate-byte, default 10, clamp 1–10); LAST_MSP-`AtomicU32` bij elk `0x7A`-frame
+- [ ] `0x1E`-attitude (RPY i16LE, rad×10000) + `0x7B`-antwoorden (ping-echo; SetPid-ack later) de UART op via `platform.crsf_tx`
+- [ ] nieuwe `telemetry_task` (10Hz-ticker, alleen disarmed + link vers < 5s); spawnen in `main.rs`
+- [ ] cutoff-live-pad op `GyroFilter` + `DtermFilter` (`set_cutoff`, coeffs herberekenen)
+- [ ] verificatie-volgorde: ping heen-en-weer (bewijst ook adres-byte terugweg) → attitude → PID-tuning → pas daarna bereik-test open veld
 - [ ] limiet accepteren: telemetrie terug is enkele frames/sec (trage horizon ~1–5 Hz); ratio omhoog = RC-rate omlaag
 - [ ] **Later:** live tuning persistent opslaan in flash (nu alleen RAM — na reboot alles kwijt); laden bij boot, expliciet save-commando, defaults als fallback. Vastgelegd formaat:
   ```rust

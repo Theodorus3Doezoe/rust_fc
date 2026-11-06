@@ -1,4 +1,5 @@
 use crate::controllers::pid_controller::{PidConfig, PidController};
+use crate::sync::PidTune;
 use crate::types::Rates;
 
 pub struct RatePID {
@@ -47,5 +48,23 @@ impl RatePID {
         self.roll.set_kd(kd.roll);
         self.pitch.set_kd(kd.pitch);
         self.yaw.set_kd(kd.yaw);
+    }
+
+    pub fn set_all(&mut self, gains: [crate::sync::PidTune; 3]) {
+        self.set_kp(crate::types::Rates {
+            roll: gains[0].kp,
+            pitch: gains[1].kp,
+            yaw: gains[2].kp,
+        });
+        self.set_ki(crate::types::Rates {
+            roll: gains[0].ki,
+            pitch: gains[1].ki,
+            yaw: gains[2].ki,
+        });
+        self.set_kd(crate::types::Rates {
+            roll: gains[0].kd,
+            pitch: gains[1].kd,
+            yaw: gains[2].kd,
+        });
     }
 }
