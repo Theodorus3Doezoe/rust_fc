@@ -17,3 +17,17 @@
   - blackbox (RAM/flash-ringbuffer, dumpen na vlucht)
   - CRSF-telemetrie terug over ELRS (later, via geparkeerde tx-helft)
 - Doel: call-sites (`rate.rs`, `attitude.rs`) loggen één keer, backlog-items kiezen per sink aan/uit zonder die code aan te raken
+
+## FFT-notch (Betaflight-stijl dynamic notch)
+- Bestaande RPM-notch volgt ESC-toerental; deze analyseert het **gyrosignaal zelf**: `no_std`-FFT (bv `microfft`) op gedecimeerde gyrodata + piekdetectie → notches op de luidste pieken
+- Voorwaarde: eerst blackbox (anders niet te valideren), draaien als aparte laag-frequente task naast de 8kHz-loop (te zwaar voor in de loop zelf)
+- Daarna pas: statische frame-notch op gemeten resonanties kan eventueel vervallen als de FFT ze meepakt
+
+## Web-TUI (postcard over WebSerial)
+- Protocol blijft `postcard` (geen JSON): `FromPc`-tuning + `ToPc`-telemetrie, website praat via WebSerial direct met de FC
+- JS-codec voor postcard nabouwen (vibe-code), live PID-tuning + VQF/attitude-visualisatie, geen herflash-flow (flashen blijft handmatig via BOOTSEL/UF2)
+
+## ELRS-Lua-menu voor in het veld (geparkeerd)
+- Pas relevant als tunen zonder laptop nodig blijkt; USB/web-TUI heeft voorrang (meer werk voor slechtere UI)
+- Vereist: CRSF-telemetrie + device-discovery + parameter-lezen/schrijven op de FC, plus Lua-script voor het EdgeTX-menu
+- Bestaande ELRS-Lua (link-instellingen) gewoon blijven gebruiken, dat kost niks

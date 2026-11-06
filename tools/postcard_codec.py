@@ -100,8 +100,7 @@ class Rates:
 class RcChannels:
     rates: Rates
     throttle: float
-    arm: bool
-    disarm: bool
+    armed: bool
     mode: int = 0  # 0: FlightMode::Angle, 1: FlightMode::Rate
 
 
@@ -110,22 +109,20 @@ class FromPcCommand:
     
     @staticmethod
     def encode_rc_channels(roll: float, pitch: float, yaw: float, throttle: float,
-                           arm: bool, disarm: bool, mode: int = 0) -> bytes:
+                           armed: bool, mode: int = 0) -> bytes:
         """
         Postcard serialization for `RcChannels` struct (src/receiver/receiver.rs):
         struct RcChannels {
             rates: Rates { roll: f32, pitch: f32, yaw: f32 },
             throttle: f32,
-            arm: bool,
-            disarm: bool,
+            armed: bool,
             mode: FlightMode (0: Angle, 1: Rate)
         }
         """
         floats_bytes = struct.pack("<ffff", roll, pitch, yaw, throttle)
-        arm_byte = b"\x01" if arm else b"\x00"
-        disarm_byte = b"\x01" if disarm else b"\x00"
+        armed_byte = b"\x01" if armed else b"\x00"
         mode_varint = encode_varint(mode)
-        return floats_bytes + arm_byte + disarm_byte + mode_varint
+        return floats_bytes + armed_byte + mode_varint
 
     @staticmethod
     def encode_arm() -> bytes:
@@ -146,11 +143,12 @@ class FromPcCommand:
         return encode_varint(2) + struct.pack("<Bfff", axis, kp, ki, kd)
 
     @staticmethod
-    def encode_set_filter(gyro_cutoff: float, dterm_cutoff: float) -> bytes:
+    def encode_set_filter(gyro_cutoff: float, dterm_lpf1: float, dterm_lpf2: float) -> bytes:
         """
-        Variant index 3: SetFilter { gyro_cutoff: f32, dterm_cutoff: f32 }
+        Variant index 3: SetFilter { gyro_cutoff: f32, dterm_lpf1: f32, dterm_lpf2: f32 }
+        Draadvolgorde: gyro, dterm-lpf1, dterm-lpf2 (3x f32 LE).
         """
-        return encode_varint(3) + struct.pack("<ff", gyro_cutoff, dterm_cutoff)
+        return encode_varint(3) + struct.pack("<fff", gyro_cutoff, dterm_lpf1, dterm_lpf2)
 
 
 def decode_to_pc_packet(data: bytes) -> Tuple[Optional[ToPcMessage], int]:

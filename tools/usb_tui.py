@@ -62,7 +62,8 @@ class SerialInterface:
         }
         self.filter_settings = {
             "gyro_cutoff": 100.0,  # Hz
-            "dterm_cutoff": 40.0,  # Hz
+            "dterm_lpf1": 150.0,  # Hz
+            "dterm_lpf2": 250.0,  # Hz
             "set": False,
         }
 
@@ -152,15 +153,16 @@ class SerialInterface:
             self.log(f"[ERROR] Failed to send PID tune: {e}")
             return False
 
-    def send_tune_filter(self, gyro_cutoff: float, dterm_cutoff: float) -> bool:
+    def send_tune_filter(self, gyro_cutoff: float, dterm_lpf1: float, dterm_lpf2: float) -> bool:
         self.filter_settings["gyro_cutoff"] = gyro_cutoff
-        self.filter_settings["dterm_cutoff"] = dterm_cutoff
+        self.filter_settings["dterm_lpf1"] = dterm_lpf1
+        self.filter_settings["dterm_lpf2"] = dterm_lpf2
         self.filter_settings["set"] = True
-        payload = FromPcCommand.encode_set_filter(gyro_cutoff, dterm_cutoff)
+        payload = FromPcCommand.encode_set_filter(gyro_cutoff, dterm_lpf1, dterm_lpf2)
 
         if self.sim:
             self.tx_count += 1
-            self.log(f"[TX TUNE] Filters: Gyro={gyro_cutoff:.1f}Hz, D-Term={dterm_cutoff:.1f}Hz")
+            self.log(f"[TX TUNE] Filters: Gyro={gyro_cutoff:.1f}Hz, D-Term LPF1={dterm_lpf1:.1f}Hz, LPF2={dterm_lpf2:.1f}Hz")
             if self.on_update_callback:
                 self.on_update_callback()
             return True
@@ -173,7 +175,7 @@ class SerialInterface:
             self.ser.write(payload)
             self.ser.flush()
             self.tx_count += 1
-            self.log(f"[TX TUNE] Filters: Gyro={gyro_cutoff:.1f}Hz, D-Term={dterm_cutoff:.1f}Hz ({payload.hex()})")
+            self.log(f"[TX TUNE] Filters: Gyro={gyro_cutoff:.1f}Hz, D-Term LPF1={dterm_lpf1:.1f}Hz, LPF2={dterm_lpf2:.1f}Hz ({payload.hex()})")
             return True
         except Exception as e:
             self.error_count += 1
@@ -221,6 +223,7 @@ class SerialInterface:
                 # ARM (HOLDING)-regels verschenen).
                 arm = st.arm_pressed or getattr(self, "cmd_arm_held", False)
                 disarm = st.disarm_pressed or getattr(self, "cmd_disarm_held", False)
+                armed = arm and not disarm
             else:
                 roll = 0.0
                 pitch = 0.0
@@ -228,15 +231,15 @@ class SerialInterface:
                 throttle = 0.0
                 arm = getattr(self, "cmd_arm_held", False)
                 disarm = getattr(self, "cmd_disarm_held", False)
+                armed = arm and not disarm
 
-            # Send 19-byte RcChannels packet
-            self.send_rc_channels(roll, pitch, yaw, throttle, arm, disarm)
+            # Send 18-byte RcChannels packet
+            self.send_rc_channels(roll, pitch, yaw, throttle, armed)
 
             now = time.time()
-            if (arm or disarm) and (now - last_log_time > 0.5):
+            if armed and (now - last_log_time > 0.5):
                 last_log_time = now
-                lbl = "ARM (HOLDING)" if arm else "DISARM (HOLDING)"
-                self.log(f"[TX RC STREAM] {lbl} thr={throttle:.2f} r={roll:+.2f} p={pitch:+.2f} y={yaw:+.2f}")
+                self.log(f"[TX RC STREAM] ARM (HOLDING) thr={throttle:.2f} r={roll:+.2f} p={pitch:+.2f} y={yaw:+.2f}")
 
     def stop(self):
         # Stop the workers *before* closing the port. A closed pyserial handle
@@ -272,9 +275,9 @@ class SerialInterface:
         self.start()
 
     def send_rc_channels(self, roll: float = 0.0, pitch: float = 0.0, yaw: float = 0.0,
-                         throttle: float = 0.0, arm: bool = False, disarm: bool = False, mode: int = 0) -> bool:
+                         throttle: float = 0.0, armed: bool = False, mode: int = 0) -> bool:
         """Send Postcard-encoded `RcChannels` packet matching `src/receiver/receiver.rs`."""
-        payload = FromPcCommand.encode_rc_channels(roll, pitch, yaw, throttle, arm, disarm, mode)
+        payload = FromPcCommand.encode_rc_channels(roll, pitch, yaw, throttle, armed, mode)
         if self.sim:
             self.tx_count += 1
             return True
@@ -304,8 +307,8 @@ class SerialInterface:
             self.log(f"[ERROR] Unknown command: '{cmd_name}'")
             return False
 
-        # Send ONLY the 19-byte RcChannels packet (src/receiver/receiver.rs)
-        success = self.send_rc_channels(arm=arm_flag, disarm=disarm_flag)
+        # Send ONLY the 18-byte RcChannels packet (src/receiver/receiver.rs)
+        success = self.send_rc_channels(armed=arm_flag)
 
         if self.sim:
             self.log(f"[TX] Sent command: {label}")
@@ -621,8 +624,10 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False, deadzone: float 
         res.extend([
             ("class:label", "  Gyro Cutoff: "),
             (flt_val_style, f"{flt['gyro_cutoff']:5.1f} Hz  "),
-            ("class:label", "D-Term Cutoff: "),
-            (flt_val_style, f"{flt['dterm_cutoff']:5.1f} Hz "),
+            ("class:label", "D-Term LPF1: "),
+            (flt_val_style, f"{flt['dterm_lpf1']:5.1f} Hz "),
+            ("class:label", "LPF2: "),
+            (flt_val_style, f"{flt['dterm_lpf2']:5.1f} Hz "),
             (flt_tag_style, f"{flt_tag_text}\n")
         ])
         return res
@@ -689,8 +694,9 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False, deadzone: float 
         serial_if.log(f"  Roll  PID -> Kp: {pids['roll']['kp']:.3f}, Ki: {pids['roll']['ki']:.3f}, Kd: {pids['roll']['kd']:.3f}")
         serial_if.log(f"  Pitch PID -> Kp: {pids['pitch']['kp']:.3f}, Ki: {pids['pitch']['ki']:.3f}, Kd: {pids['pitch']['kd']:.3f}")
         serial_if.log(f"  Yaw   PID -> Kp: {pids['yaw']['kp']:.3f}, Ki: {pids['yaw']['ki']:.3f}, Kd: {pids['yaw']['kd']:.3f}")
-        serial_if.log(f"  Gyro Cutoff   -> {flt['gyro_cutoff']:.1f} Hz")
-        serial_if.log(f"  D-Term Cutoff -> {flt['dterm_cutoff']:.1f} Hz")
+        serial_if.log(f"  Gyro Cutoff    -> {flt['gyro_cutoff']:.1f} Hz")
+        serial_if.log(f"  D-Term LPF1    -> {flt['dterm_lpf1']:.1f} Hz")
+        serial_if.log(f"  D-Term LPF2    -> {flt['dterm_lpf2']:.1f} Hz")
         serial_if.log("------------------------------------------------------------")
         serial_if.log("Commands to live tune:")
         serial_if.log("  tune roll <kp> <ki> <kd>   (e.g., tune roll 1.2 0.05 0.15)")
@@ -839,15 +845,24 @@ def run_tui(serial_if: SerialInterface, xbox_sim: bool = False, deadzone: float 
             elif sub in ("gyro", "gyro_filter") and len(parts) >= 3:
                 try:
                     cutoff = float(parts[2])
-                    serial_if.send_tune_filter(cutoff, serial_if.filter_settings["dterm_cutoff"])
+                    f = serial_if.filter_settings
+                    serial_if.send_tune_filter(cutoff, f["dterm_lpf1"], f["dterm_lpf2"])
                 except ValueError:
                     serial_if.log("[ERROR] Invalid cutoff Hz. Format: tune gyro <cutoff_hz>")
-            elif sub in ("dterm", "dterm_filter") and len(parts) >= 3:
+            elif sub in ("dterm1", "dterm_lpf1") and len(parts) >= 3:
                 try:
                     cutoff = float(parts[2])
-                    serial_if.send_tune_filter(serial_if.filter_settings["gyro_cutoff"], cutoff)
+                    f = serial_if.filter_settings
+                    serial_if.send_tune_filter(f["gyro_cutoff"], cutoff, f["dterm_lpf2"])
                 except ValueError:
-                    serial_if.log("[ERROR] Invalid cutoff Hz. Format: tune dterm <cutoff_hz>")
+                    serial_if.log("[ERROR] Invalid cutoff Hz. Format: tune dterm1 <cutoff_hz>")
+            elif sub in ("dterm2", "dterm_lpf2", "dterm", "dterm_filter") and len(parts) >= 3:
+                try:
+                    cutoff = float(parts[2])
+                    f = serial_if.filter_settings
+                    serial_if.send_tune_filter(f["gyro_cutoff"], f["dterm_lpf1"], cutoff)
+                except ValueError:
+                    serial_if.log("[ERROR] Invalid cutoff Hz. Format: tune dterm2 <cutoff_hz>")
             else:
                 show_tuning_menu()
         elif parts[0] in ("connect", "select", "use") and len(parts) > 1:

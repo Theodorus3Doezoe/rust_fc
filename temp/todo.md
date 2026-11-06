@@ -62,13 +62,39 @@ Doel: eerst build groen, dan tri-frame, dan ELRS. Dit lijstje werken we samen af
 - [x] `config.rs`: `ActiveFrame` op tri zetten voor test
 - [ ] bench zonder props: arm → `[ESC] ML ~95%+`, disarm = stop, failsafe bij RX-verlies
 
-### C. ELRS (bezig)
-- [ ] LilyGO TTGO LoRa32 868 SX1276 flashen als DIY Custom ESP 900MHz RX (EU868, zelfde versie + phrase als JR-module)
-- [ ] Pinmapping: SCK 5, MISO 19, MOSI 27, CS 18, RST 23, DIO0 26, DIO1 33 (V1.x: RST 14)
+### C. ELRS (bezig — link bewezen, status 6 nov)
+Bewezen: 2× LilyGO **V1** (geen V2!), ELRS 3.6.4, EU868, phrase sven_rx, LQ 100%, RSSI ≈ −40 dBm.
+Let op: V1 → RST = GPIO14 (geen 23); laptop→TX-link draait op **921600** (geen 420000).
+- [x] LilyGO-RX flashen als DIY TTGO **V1** 900MHz RX + binden (LQ 100%)
+- [x] LilyGO-TX flashen als DIY TTGO **V1** 900MHz TX, CRSF op USB (3/1), handshake + OLED ok
 - [x] RcChannels: `arm/disarm` → één `armed: bool`, `rx.rs` mee omgezet
 - [x] Board-UART: `UartRead`/`UartWrite`-traits, UART0/PIN_0/PIN_1 + DMA_CH2/CH3, `take_crsf_uart()` met `split()` (tx geparkeerd voor later)
 - [x] `uart.rs`: trait-impls voor `UartTx`/`UartRx`-helften (`cargo check` weer groen)
 - [x] `src/receiver/crsf.rs`: parser met `crsf`-crate (`PacketParser`, `RcChannels`-mapping, `CrsfError`) — `cargo check` groen
 - [x] `receiver::Concrete` omzetten naar CRSF + wiring in `platform.rs` (tx-helft geparkeerd in `Platform`)
-- [ ] USB-gelijk trekken (nu nog oud): `usb_receiver.rs` + `tools/postcard_codec.py` + `usb_tui.py` naar `armed`
-- [ ] USB vrijmaken voor tuning/telemetrie: `FromPc SetPid(2)/SetFilter(3)` + `ToPc` implementeren
+- [x] USB-gelijk trekken: `tools/postcard_codec.py` + `usb_tui.py` naar `armed` (18B-pakket, Rust-kant volgt automatisch via derive)
+- [ ] **Check:** RX→FC-baud (FC-UART staat op 420000 — verifiëren wat de RX uitstuurt)
+- [ ] **Check:** arm-kanaal/polariteit met RadioMaster (B0?) + pitch-teken + stick-bereik
+- [ ] Tuning/telemetrie-transport: zie nieuw plan hieronder (D) — wordt ELRS extended frames, niet USB
+
+### D. Live tuning over ELRS extended frames (nieuw, vervangt USB-tuning als eerstvolgende)
+Ontwerp bewezen in source, contract vastgelegd. Regels: alleen disarmed + bench, Model Match uit, link vereist, 5 s-timeout als vangnet. Normaal vliegen = nul tuning-overhead.
+- [ ] `crsf.rs`: `next_raw_packet()` i.p.v. `next_packet()` (crate 2.0.1 kent `0x7A` niet)
+- [ ] `0x7A` parsen: `0x7F00` = postcard-tunnel (bestaande codec), `0x7F01`/`0x7F02` = stream aan/uit (opt 1 byte rate-Hz, default 10, clamp 1–10), `0x7F03` = ping (≤8B, echo via `0x7B`)
+- [ ] Let op: `SetFilter` is **3 floats** (gyro, lpf1, lpf2 — 12B na varint-3, f32LE), geen 2 meer; filter-statics dus 3× `AtomicF32`
+- [ ] `0x7B`-antwoorden + `0x1E`-attitude (RPY i16LE, rad×10000) de UART op via `platform.crsf_tx`
+- [ ] `0x7B`-antwoorden + `0x1E`-attitude (rad×10000, i16LE) de UART op via `platform.crsf_tx`
+- [ ] statics: ATTITUDE + STREAM als `AtomicBool` + 5 s-timeout; PID-gains als `AtomicF32`-statics
+- [ ] nieuwe `telemetry_task`; `receiver_task` blijft zoals hij is
+- [ ] verificatie-volgorde: ping heen-en-weer → attitude → PID-tuning → pas daarna bereik-test open veld
+- [ ] limiet accepteren: telemetrie terug is enkele frames/sec (trage horizon ~1–5 Hz); ratio omhoog = RC-rate omlaag
+- [ ] **Later:** live tuning persistent opslaan in flash (nu alleen RAM — na reboot alles kwijt); laden bij boot, expliciet save-commando, defaults als fallback. Vastgelegd formaat:
+  ```rust
+  struct SavedConfig {
+      magic: u32,      // 0x54494E47
+      versie: u16,
+      gains: [f32; 9], // 3 assen × kp/ki/kd
+      filters: [f32; 2],
+      crc32: u32,      // crc over alles hierboven, excl. zichzelf
+  }
+  ```
