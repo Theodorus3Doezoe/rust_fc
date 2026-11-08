@@ -1,10 +1,7 @@
 use super::frame::DshotTelemetry;
 use core::sync::atomic::{AtomicU16, AtomicU32, AtomicUsize, Ordering};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::signal::Signal;
 
 pub struct EscLink {
-    tx: Signal<CriticalSectionRawMutex, u16>,
     raw: AtomicU16,
     erpm: AtomicU32,
     erpm_period_us: AtomicU32,
@@ -13,19 +10,10 @@ pub struct EscLink {
 impl EscLink {
     pub const fn new() -> Self {
         Self {
-            tx: Signal::new(),
             raw: AtomicU16::new(u16::MAX),
             erpm: AtomicU32::new(u32::MAX),
             erpm_period_us: AtomicU32::new(u32::MAX),
         }
-    }
-
-    pub fn send(&self, frame: u16) {
-        self.tx.signal(frame);
-    }
-
-    pub async fn wait(&self) -> u16 {
-        self.tx.wait().await
     }
 
     pub fn publish(&self, raw: u16, erpm: u32, period: u32) {

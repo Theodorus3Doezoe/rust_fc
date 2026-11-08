@@ -31,7 +31,7 @@ macro_rules! init_motor_sm {
 macro_rules! wait_tx_space {
     ($sm:expr, $val:expr, $($variant:ident),* $(,)?) => {
         match $sm {
-            $(MotorSm::$variant(sm) => sm.tx().wait_push($val).await,)*
+            $(MotorSm::$variant(sm) => sm.tx().try_push($val),)*
         }
     };
 }
@@ -39,7 +39,7 @@ macro_rules! wait_tx_space {
 macro_rules! wait_rx_word {
     ($sm:expr, $($variant:ident),* $(,)?) => {
         match $sm {
-            $(MotorSm::$variant(sm) => sm.rx().wait_pull().await,)*
+            $(MotorSm::$variant(sm) => sm.rx().try_pull(),)*
         }
     };
 }
@@ -49,11 +49,11 @@ impl MotorSm {
         init_motor_sm!(self, config, pin, Sm0, Sm1, Sm2, Sm3);
     }
 
-    pub async fn push_tx(&mut self, value: u32) {
+    pub fn try_push_tx(&mut self, value: u32) -> bool {
         wait_tx_space!(self, value, Sm0, Sm1, Sm2, Sm3)
     }
 
-    pub async fn read_word(&mut self) -> u32 {
+    pub fn try_pull_word(&mut self) -> Option<u32> {
         wait_rx_word!(self, Sm0, Sm1, Sm2, Sm3)
     }
 }
@@ -96,15 +96,28 @@ impl PioDshotChannel {
 
 pub struct PioEscDriver {
     sm: MotorSm,
+    pending_first: Option<u32>,
 }
 
 impl EscDriver for PioEscDriver {
-    async fn send_frame(&mut self, frame: u16) {
-        self.sm.push_tx((frame as u32) << 16).await;
+    fn try_send(&mut self, frame: u16) -> bool {
+        self.sm.try_push_tx((frame as u32) << 16)
     }
 
-    async fn read_pair(&mut self) -> (u32, u32) {
-        (self.sm.read_word().await, self.sm.read_word().await)
+    fn try_recv(&mut self) -> Option<u64> {
+        let first = match self.pending_first.take() {
+            Some(f) => f,
+            None => match self.sm.try_pull_word()? {
+                f => f,
+            },
+        };
+        match self.sm.try_pull_word() {
+            Some(second) => Some(((first as u64) << 32) | second as u64),
+            None => {
+                self.pending_first = Some(first);
+                None
+            }
+        }
     }
 }
 
@@ -151,5 +164,8 @@ pub fn take_esc_driver(b: &mut Rp2350Dev) -> Option<PioEscDriver> {
     let mut sm = b.available_sm.pop_front()?;
     sm.init(&config, &pin_dshot);
 
-    Some(PioEscDriver { sm })
+    Some(PioEscDriver {
+        sm,
+        pending_first: None,
+    })
 }

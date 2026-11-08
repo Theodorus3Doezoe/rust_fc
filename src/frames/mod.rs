@@ -17,6 +17,7 @@ pub trait Frame {
     // async fn arm_motor(&mut self);
     // fn disarm(&mut self);
     async fn set_direction(&mut self, permanent: bool);
+    fn poll_telemetry(&mut self) -> heapless::Vec<Option<u64>, MAX_MOTORS>;
 }
 
 #[derive(Default, defmt::Format)]

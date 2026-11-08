@@ -4,7 +4,8 @@ use crate::actuators::motor::MotorController;
 use crate::actuators::provider::ActuatorProvider;
 use crate::actuators::servo::ServoController;
 use crate::actuators::{dshot::frame, motor};
-use crate::config::frame::{MotorPin, ServoPin};
+use crate::config::frame::ConcreteMotor;
+use crate::config::frame::ServoPin;
 use crate::config::{ActiveBoard, SERVO_FREQ_HZ};
 use crate::frames::FrameOutput;
 use crate::mixers::Mixer;
@@ -19,7 +20,7 @@ pub struct TriCopterFrame<P, M> {
     mixer: TriMixer,
 }
 
-impl Frame for TriCopterFrame<ServoPin, MotorPin> {
+impl Frame for TriCopterFrame<ServoPin, ConcreteMotor> {
     type Board = ActiveBoard;
     const MOTOR_COUNT: usize = 3;
     type Telemetry = frame::DshotTelemetry;
@@ -100,5 +101,13 @@ impl Frame for TriCopterFrame<ServoPin, MotorPin> {
                 Timer::after(Duration::from_micros(100)).await;
             }
         }
+    }
+
+    fn poll_telemetry(&mut self) -> heapless::Vec<Option<u64>, MAX_MOTORS> {
+        let mut v = heapless::Vec::new();
+        let _ = v.push(self.motor_left.try_recv_raw());
+        let _ = v.push(self.motor_right.try_recv_raw());
+        let _ = v.push(self.motor_back.try_recv_raw());
+        v
     }
 }

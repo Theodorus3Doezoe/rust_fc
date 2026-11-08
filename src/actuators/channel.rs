@@ -8,4 +8,5 @@ pub trait MotorChannel {
     fn esc_command(&mut self, cmd: u8) -> Result<(), Self::Error> {
         Ok(())
     }
+    fn try_recv_raw(&mut self) -> Option<u64>;
 }

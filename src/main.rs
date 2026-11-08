@@ -26,7 +26,7 @@ use crate::{
         provider::ActuatorProvider,
     },
     state::{SYSTEM, State},
-    sync::{AtomicF32, AtomicRates, ImuQueue},
+    sync::{AtomicF32, AtomicRates, ImuQueue, SignaledQueue},
     tasks::{
         attitude::attitude_task, esc_telemetry::esc_task, rate::rate_task, rx::receiver_task,
         usb::usb_task,
@@ -40,12 +40,16 @@ static IMU_QUEUE: StaticCell<ImuQueue> = StaticCell::new();
 static PILOT_INPUT: AtomicRates = AtomicRates::new();
 static THROTTLE: AtomicF32 = AtomicF32::new(0.0);
 static RATE_SETPOINTS: AtomicRates = AtomicRates::new();
+static ESC_QUEUE: StaticCell<SignaledQueue<(usize, u64), 16>> = StaticCell::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut platform = platform::Platform::init().await;
     let queue = IMU_QUEUE.init(Queue::new());
     let (producer, consumer) = queue.split();
+
+    let esc_telem_queue = ESC_QUEUE.init(SignaledQueue::new());
+    let (esc_telem_tx, esc_telem_rx) = esc_telem_queue.split();
 
     platform.rate_spawner.spawn(
         rate_task(
@@ -54,15 +58,12 @@ async fn main(spawner: Spawner) {
             producer,
             &RATE_SETPOINTS,
             &THROTTLE,
+            esc_telem_tx,
         )
         .unwrap(),
     );
 
-    for k in 0..claimed_links() {
-        let driver = platform.board.take_esc_driver().unwrap();
-        let link = link_at(k).unwrap();
-        spawner.spawn(esc_task(link, driver).unwrap());
-    }
+    spawner.spawn(esc_task(esc_telem_rx).unwrap());
 
     // Receiver task
     spawner.spawn(receiver_task(platform.rx, &THROTTLE, &PILOT_INPUT).unwrap());

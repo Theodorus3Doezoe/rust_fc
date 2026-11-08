@@ -1,6 +1,7 @@
 use embassy_time::{Duration, Instant, Ticker};
 
 use crate::filters::rpm_filter::{self, RpmFilter};
+use crate::sync::Sender;
 use crate::{
     config::{Frame, GYRO_FILTER_CUTOFF_HZ, Imu, MOTOR_POLE_PAIRS, RATE_FREQ_HZ, frame, imu},
     controllers::{pid_controller::PidConfig, rate_pid::RatePID},
@@ -10,6 +11,7 @@ use crate::{
     sync::{AtomicF32, AtomicRates, ImuProducer},
     types::Rates,
 };
+
 #[embassy_executor::task]
 pub async fn rate_task(
     mut imu: imu::Calibrated,
@@ -17,6 +19,7 @@ pub async fn rate_task(
     mut producer: ImuProducer,
     rate_setpoints: &'static AtomicRates,
     throttle: &'static AtomicF32,
+    mut telem_tx: Sender<'static, (usize, u64)>,
 ) {
     let mut ticker = Ticker::every(Duration::from_hz(RATE_FREQ_HZ as u64));
     let mut gyro_filter = GyroFilter::new(RATE_FREQ_HZ as f32, GYRO_FILTER_CUTOFF_HZ);
@@ -88,9 +91,13 @@ pub async fn rate_task(
         let _ = producer.enqueue(burst);
 
         let filtered_gyro = gyro_filter.apply(burst.gyro);
+
         let esc_telemetry = frame.read_telemetry();
         let hz: [Option<f32>; MOTORS] = core::array::from_fn(|i| {
-            esc_telemetry[i].map(|t| t.erpm as f32 / 60.0 / MOTOR_POLE_PAIRS)
+            esc_telemetry
+                .get(i)
+                .and_then(|opt| *opt)
+                .map(|t| t.erpm as f32 / 60.0 / MOTOR_POLE_PAIRS)
         });
 
         rpm_filter.update(&hz);
@@ -106,7 +113,13 @@ pub async fn rate_task(
                 let pid = rate_pids.update(sp, filtered_gyro, RATE_DT);
 
                 let out = frame.apply(throttle.get(), pid);
-                telemetry = Some((sp, pid, out));
+
+                let raw_telemetry = frame.poll_telemetry();
+                for (index, raw_opt) in raw_telemetry.iter().enumerate() {
+                    if let Some(raw) = raw_opt {
+                        let _ = telem_tx.try_send((index, *raw));
+                    }
+                }
             }
             State::Disarmed | State::Init => {
                 rate_pids.reset();

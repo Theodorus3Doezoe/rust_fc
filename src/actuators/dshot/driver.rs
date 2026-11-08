@@ -1,4 +1,4 @@
 pub trait EscDriver {
-    async fn send_frame(&mut self, frame: u16);
-    async fn read_pair(&mut self) -> (u32, u32);
+    fn try_send(&mut self, frame: u16) -> bool;
+    fn try_recv(&mut self) -> Option<u64>;
 }

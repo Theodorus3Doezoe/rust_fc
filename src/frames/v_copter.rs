@@ -1,7 +1,8 @@
 use crate::actuators::provider::ActuatorProvider;
 use crate::actuators::servo::ServoController;
 use crate::actuators::{dshot::frame, motor};
-use crate::config::frame::{MotorPin, ServoPin};
+use crate::config::frame::ConcreteMotor;
+use crate::config::frame::ServoPin;
 use crate::config::{ActiveBoard, SERVO_FREQ_HZ};
 use crate::mixers::bi_copter::{self, BiCopMixer, BicopterOutput};
 use embassy_time::{Duration, Timer};
@@ -26,7 +27,7 @@ pub struct ActuatorOutput {
     pub motor_right_throttle: u16,
 }
 
-impl Frame for VCopterFrame<ServoPin, MotorPin> {
+impl Frame for VCopterFrame<ServoPin, ConcreteMotor> {
     type Board = ActiveBoard;
     // type ServoPin = B::ServoPin;
     // type MotorPin = B::MotorPin;
@@ -128,5 +129,14 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
                 Timer::after(Duration::from_micros(100)).await;
             }
         }
+    }
+
+    // In de impl Frame for VCopterFrame (of hoe die er ook uitziet):
+    fn poll_telemetry(&mut self) -> heapless::Vec<Option<u64>, MAX_MOTORS> {
+        let mut v = heapless::Vec::new();
+        // Vervang deze door de daadwerkelijke motor-velden van jouw v_copter
+        let _ = v.push(self.motor_left.try_recv_raw());
+        let _ = v.push(self.motor_right.try_recv_raw());
+        v
     }
 }

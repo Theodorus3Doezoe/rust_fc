@@ -19,4 +19,8 @@ impl<C: MotorChannel> MotorController<C> {
     pub fn command(&mut self, cmd: u8) {
         let _ = self.channel.esc_command(cmd);
     }
+
+    pub fn try_recv_raw(&mut self) -> Option<u64> {
+        self.channel.try_recv_raw()
+    }
 }

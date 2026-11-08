@@ -9,8 +9,9 @@ pub trait ActuatorProvider {
     fn take_esc_driver(&mut self) -> Option<Self::Esc>;
 
     // dshot specifik now
-    fn take_motor(&mut self) -> Option<DshotChannel> {
+    fn take_motor(&mut self) -> Option<DshotChannel<Self::Esc>> {
         let link = claim_link()?;
-        Some(DshotChannel::new(link))
+        let driver = self.take_esc_driver()?;
+        Some(DshotChannel::new(driver, link))
     }
 }

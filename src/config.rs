@@ -36,8 +36,8 @@ pub mod frame {
 
     pub type ServoPin = <ActiveBoard as ActuatorProvider>::ServoPin;
     // pub type MotorPin = <ActiveBoard as ActuatorProvider>::MotorPin;
-    pub type MotorPin = DshotChannel;
-    pub type Concrete = ActiveFrame<ServoPin, MotorPin>;
+    pub type ConcreteMotor = DshotChannel<<ActiveBoard as ActuatorProvider>::Esc>;
+    pub type Concrete = ActiveFrame<ServoPin, ConcreteMotor>;
 }
 
 pub mod receiver {
