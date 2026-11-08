@@ -1,4 +1,5 @@
 use crate::actuators::provider::ActuatorProvider;
+use embassy_executor::SendSpawner;
 use embassy_usb_driver::Driver;
 use embedded_hal_async::spi::SpiDevice;
 
@@ -24,4 +25,21 @@ pub trait Board: ActuatorProvider {
     fn take_imu_spi(&mut self) -> Self::ImuSpi;
     fn take_usb_driver(&mut self) -> Self::UsbDriver;
     fn take_crsf_uart(&mut self) -> (Self::CrsfTx, Self::CrsfRx);
+    fn start_rate_executor() -> SendSpawner;
+}
+
+use crate::config::ExcecutorPriority;
+
+pub trait PriorityLevel: Copy {
+    const HIGH: Self;
+    const MEDIUM: Self;
+    const LOW: Self;
+}
+
+pub fn to_priority<P: PriorityLevel>(logical: ExcecutorPriority) -> P {
+    match logical {
+        ExcecutorPriority::High => P::HIGH,
+        ExcecutorPriority::Medium => P::MEDIUM,
+        ExcecutorPriority::Low => P::LOW,
+    }
 }
