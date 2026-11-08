@@ -44,19 +44,10 @@ static RATE_SETPOINTS: AtomicRates = AtomicRates::new();
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut platform = platform::Platform::init().await;
-
-    for k in 0..claimed_links() {
-        let driver = platform.board.take_esc_driver().unwrap();
-        let link = link_at(k).unwrap();
-        spawner.spawn(esc_task(link, driver).unwrap());
-    }
-
     let queue = IMU_QUEUE.init(Queue::new());
     let (producer, consumer) = queue.split();
-    // Receiver task
-    spawner.spawn(receiver_task(platform.rx, &THROTTLE, &PILOT_INPUT).unwrap());
-    spawner.spawn(attitude_task(consumer, &PILOT_INPUT, &RATE_SETPOINTS).unwrap());
-    spawner.spawn(
+
+    platform.rate_spawner.spawn(
         rate_task(
             platform.imu,
             platform.frame,
@@ -66,6 +57,16 @@ async fn main(spawner: Spawner) {
         )
         .unwrap(),
     );
+
+    for k in 0..claimed_links() {
+        let driver = platform.board.take_esc_driver().unwrap();
+        let link = link_at(k).unwrap();
+        spawner.spawn(esc_task(link, driver).unwrap());
+    }
+
+    // Receiver task
+    spawner.spawn(receiver_task(platform.rx, &THROTTLE, &PILOT_INPUT).unwrap());
+    spawner.spawn(attitude_task(consumer, &PILOT_INPUT, &RATE_SETPOINTS).unwrap());
 
     spawner.spawn(usb_task(platform.usb_dev).unwrap());
 
