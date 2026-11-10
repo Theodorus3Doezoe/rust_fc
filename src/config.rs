@@ -66,7 +66,7 @@ pub const SERVO_FREQ_HZ: u32 = 250;
 pub const DSHOT_SPEED_HZ: u32 = 600_000;
 pub const MOTOR_POLE_PAIRS: f32 = 7.0;
 pub const MOTOR_COUNT: usize = <frame::Concrete as Frame>::MOTOR_COUNT;
-pub const MOTOR_IDLE: f32 = 0.07;
+pub const MOTOR_IDLE: f32 = 0.00;
 
 pub mod pid {
     pub struct PidGains {

@@ -31,3 +31,8 @@
 - Pas relevant als tunen zonder laptop nodig blijkt; USB/web-TUI heeft voorrang (meer werk voor slechtere UI)
 - Vereist: CRSF-telemetrie + device-discovery + parameter-lezen/schrijven op de FC, plus Lua-script voor het EdgeTX-menu
 - Bestaande ELRS-Lua (link-instellingen) gewoon blijven gebruiken, dat kost niks
+
+## Hoogte-modus: left stick = omhoog/omlaag i.p.v. throttle (later)
+- In Acro kan dit niet zinvol: zonder hoogtemeting is "omhoog" gewoon throttle met een ander jasje (handmatig blijven corrigeren)
+- Echte altitude-hold vereist een hoogtesensor: barometer (absoluut, buiten goed / binnen rumoerig) of ToF (precies 0–2m, binnen ideaal) — hardware staat nog niet op het board
+- Als de sensor er is: cascaded regeling (hoogte → verticale snelheid → throttle) als extra `FlightMode` naast Angle/Rate; stick wordt dan klimsnelheid i.p.v. gasstand

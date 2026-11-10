@@ -104,12 +104,19 @@ impl Frame for VCopterFrame<ServoPin, MotorPin> {
         v
     }
 
-    fn stop_all(&mut self) {
-        let _ = self.servo_left.set_duty(0.0);
-        let _ = self.servo_right.set_duty(0.0);
+    fn stop_all(&mut self) -> FrameOutput {
+        let servo_left_us = self.servo_left.set_duty(0.0);
+        let servo_right_us = self.servo_right.set_duty(0.0);
 
         self.motor_left.apply(0.0);
         self.motor_right.apply(0.0);
+
+        FrameOutput {
+            motors: [0.0, 0.0, 0.0, 0.0],
+            motor_count: 2,
+            servo_us: [servo_left_us, servo_right_us, 0, 0],
+            servo_count: 2,
+        }
     }
 
     async fn set_direction(&mut self, permanent: bool) {

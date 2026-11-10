@@ -13,7 +13,7 @@ pub trait Frame {
     fn init(provider: &mut Self::Board) -> Self;
     fn apply(&mut self, throttle: f32, pid: Rates) -> FrameOutput;
     fn read_telemetry(&mut self) -> heapless::Vec<Option<Self::Telemetry>, MAX_MOTORS>;
-    fn stop_all(&mut self);
+    fn stop_all(&mut self) -> FrameOutput;
     // async fn arm_motor(&mut self);
     // fn disarm(&mut self);
     async fn set_direction(&mut self, permanent: bool);

@@ -20,7 +20,7 @@ pub async fn attitude_task(
 
     const ATTITUDE_DT: core::time::Duration =
         core::time::Duration::from_micros(1_000_000 / ATTITUDE_FREQ_HZ as u64);
-    defmt::info!("Attitude dt: {} µs", ATTITUDE_DT.as_micros() as u32);
+    // defmt::info!("Attitude dt: {} µs", ATTITUDE_DT.as_micros() as u32);
     let mut vqf = vqf::VqfFilter::new(ATTITUDE_DT);
     let mut ticker = Ticker::every(Duration::from_hz(ATTITUDE_FREQ_HZ as u64));
 

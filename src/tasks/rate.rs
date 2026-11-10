@@ -38,6 +38,7 @@ pub async fn rate_task(
 
     let times_a_sec = 0.5;
     let print_after_ticks = RATE_FREQ_HZ as f32 / times_a_sec;
+    let mut prev_state: State = SYSTEM.get_state();
 
     loop {
         ticker.next().await;
@@ -70,20 +71,32 @@ pub async fn rate_task(
         let filtered_gyro = rpm_filter.apply(filtered_gyro);
 
         let mut telemetry: Option<(Rates, Rates, FrameOutput)> = None;
+        let current_state = SYSTEM.get_state();
+        let state_changed = current_state != prev_state;
 
-        match SYSTEM.get_state() {
+        prev_state = current_state;
+
+        match current_state {
             State::Armed => {
+                if state_changed {
+                    let gains = [
+                        PID_VALS[ROLL_AXIS].get(),
+                        PID_VALS[PITCH_AXIS].get(),
+                        PID_VALS[YAW_AXIS].get(),
+                    ];
+                    rate_pids.set_all(gains);
+                }
+
                 let sp = rate_setpoints.get();
 
-                let gains = [
-                    PID_VALS[ROLL_AXIS].get(),
-                    PID_VALS[PITCH_AXIS].get(),
-                    PID_VALS[YAW_AXIS].get(),
-                ];
-                rate_pids.set_all(gains);
                 let pid = rate_pids.update(sp, filtered_gyro, RATE_DT);
 
-                let out = frame.apply(throttle.get(), pid);
+                let throttle_now = throttle.get();
+                let out = if throttle_now <= 0.05 {
+                    frame.stop_all()
+                } else {
+                    frame.apply(throttle_now, pid)
+                };
                 telemetry = Some((sp, pid, out));
             }
             State::Disarmed | State::Init => {
@@ -91,12 +104,14 @@ pub async fn rate_task(
                 frame.stop_all();
             }
             State::Failsafe => {
+                defmt::warn!("Failsafe triggerd");
                 rate_pids.reset();
                 match SYSTEM.get_failsafe() {
-                    FailsafeAction::None => frame.stop_all(),
+                    FailsafeAction::None => {
+                        let _ = frame.stop_all();
+                    }
                     FailsafeAction::Land => {
-                        frame.stop_all();
-                        // land procedure
+                        let _ = frame.stop_all();
                     }
                 }
             }

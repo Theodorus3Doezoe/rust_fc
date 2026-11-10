@@ -75,9 +75,8 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
                                 }
                             }
                             Some(0x7a) => {
-                                // crc check
-                                // sub id u16 from le payload
-                                // match 01/02/03
+                                // Frame: [addr][len][type][dest][orig][func_lo][func_hi][payload..][crc]
+                                // body = frame zonder crc.
                                 let b = raw.data();
                                 let data = b.split_last();
                                 if let Some((crc_ref, body)) = data {
@@ -91,12 +90,12 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
                                             embassy_time::Instant::now().as_millis() as u32,
                                             core::sync::atomic::Ordering::Relaxed,
                                         );
-                                        if body.len() >= 5 {
-                                            let func = u16::from_le_bytes([body[3], body[4]]);
+                                        if body.len() >= 7 {
+                                            let func = u16::from_le_bytes([body[5], body[6]]);
                                             match TuningCmd::from_repr(func) {
                                                 Some(TuningCmd::Postcard) => {
                                                     let Ok(msg) =
-                                                        postcard::from_bytes::<TuneMsg>(&body[5..])
+                                                        postcard::from_bytes::<TuneMsg>(&body[7..])
                                                     else {
                                                         continue;
                                                     };
@@ -131,12 +130,12 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
                                                     );
                                                 }
                                                 Some(TuningCmd::Ping) => {
-                                                    let payload_len = body.len() - 5;
+                                                    let payload_len = body.len() - 7;
                                                     if payload_len <= 8 {
                                                         let mut buf = [0u8; 8];
                                                         buf[..payload_len]
-                                                            .copy_from_slice(&body[5..]);
-                                                        PING_SIGNAL.signal((body.len() - 5, buf));
+                                                            .copy_from_slice(&body[7..]);
+                                                        PING_SIGNAL.signal((body.len() - 7, buf));
                                                     }
                                                 }
                                                 None => {}

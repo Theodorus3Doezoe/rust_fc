@@ -72,13 +72,20 @@ impl Frame for TriCopterFrame<ServoPin, MotorPin> {
         let _ = v.push(self.motor_back.latest_telemetry());
         v
     }
-
-    fn stop_all(&mut self) {
-        let _ = self.servo.set_duty(0.0);
+    // stop all helper
+    fn stop_all(&mut self) -> FrameOutput {
+        let servo_us = self.servo.set_duty(0.0);
 
         self.motor_left.apply(0.0);
         self.motor_right.apply(0.0);
         self.motor_back.apply(0.0);
+
+        FrameOutput {
+            motors: [0.0, 0.0, 0.0, 0.0],
+            motor_count: 3,
+            servo_us: [servo_us, 0, 0, 0],
+            servo_count: 1,
+        }
     }
 
     async fn set_direction(&mut self, permanent: bool) {
