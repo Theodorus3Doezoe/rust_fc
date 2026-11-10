@@ -188,3 +188,14 @@ fn norm_stick(v: u16) -> f32 {
     let span = 1811.0 - 992.0;
     ((v as f32 - 992.0) / span).clamp(-1.0, 1.0)
 }
+
+fn build_frame(addr: u8, frame_type: u8, payload: &[u8]) -> ([u8; 64], usize) {
+    let mut buf = [0; 64];
+    let payload_len = payload.len();
+    buf[0] = addr;
+    buf[1] = payload_len as u8 + 2;
+    buf[2] = frame_type;
+    buf[3..3 + payload_len].copy_from_slice(payload);
+    buf[3 + payload_len] = Crc::<u8>::new(&CRC_8_DVB_S2).checksum(&buf[2..3 + payload_len]);
+    (buf, 4 + payload_len)
+}
