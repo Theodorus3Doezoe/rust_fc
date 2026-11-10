@@ -1,3 +1,4 @@
+pub mod excecutor;
 pub mod imu_spi;
 pub mod pins;
 pub mod pio;
@@ -21,6 +22,7 @@ use embassy_rp::usb::{Driver as RpUsbDriver, InterruptHandler as UsbInterruptHan
 use embassy_rp::{Peri, bind_interrupts};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 
+use crate::boards::rp2350::excecutor::create_rate_excecutor;
 use crate::boards::rp2350::pio::dshot_pio::{MotorSm, PioEscDriver, take_esc_driver};
 
 use heapless::Deque;
@@ -141,6 +143,10 @@ impl Board for Rp2350Dev {
 
     fn take_crsf_uart(&mut self) -> (Self::CrsfTx, Self::CrsfRx) {
         self.crsf_uart.take().unwrap().split()
+    }
+
+    fn start_rate_executor() -> embassy_executor::SendSpawner {
+        create_rate_excecutor()
     }
 }
 

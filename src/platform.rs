@@ -1,3 +1,5 @@
+use embassy_executor::SendSpawner;
+
 // use crate::config::{Board, BoardType, frame, imu};
 use crate::config::{ActiveBoard, frame, receiver};
 use crate::tasks::usb;
@@ -14,11 +16,13 @@ pub struct Platform {
     pub usb_dev: usb::UsbDev,
     pub rx: receiver::Concrete,
     pub crsf_tx: <ActiveBoard as Board>::CrsfTx,
+    pub rate_spawner: SendSpawner,
 }
 
 impl Platform {
     pub async fn init() -> Self {
         let mut board = ActiveBoard::init();
+
         let mut imu_spi_device = board.take_imu_spi();
 
         imu::Raw::init_registers(&mut imu_spi_device)
@@ -56,6 +60,8 @@ impl Platform {
         let rx = crate::receiver::crsf::CrsfReceiver::new(crsf_rx);
         // let tx = telemetry::Concrete::init();
 
+        let rate_spawner = ActiveBoard::start_rate_executor();
+
         Self {
             board,
             imu,
@@ -63,6 +69,7 @@ impl Platform {
             usb_dev,
             rx,
             crsf_tx,
+            rate_spawner,
         }
     }
 }

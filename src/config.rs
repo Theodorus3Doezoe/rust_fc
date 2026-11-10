@@ -8,7 +8,13 @@ pub type SelectedImuDriver<SPI> = Mpu6500<SPI>;
 pub type ActiveFrame<P, M> = TriCopterFrame<P, M>;
 
 // pub type ActiveTelemetry = usb::UsbTx;
-//
+pub enum ExcecutorPriority {
+    Low,
+    Medium,
+    High,
+}
+
+pub const RATE_PRIO: ExcecutorPriority = ExcecutorPriority::High;
 
 pub mod imu {
     use super::*;
