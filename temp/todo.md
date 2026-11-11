@@ -64,7 +64,7 @@ Doel: eerst build groen, dan tri-frame, dan ELRS. Dit lijstje werken we samen af
 
 ### C. ELRS (bezig — link bewezen, status 6 nov)
 Bewezen: 2× LilyGO **V1** (geen V2!), ELRS 3.6.4, EU868, phrase sven_rx, LQ 100%, RSSI ≈ −40 dBm.
-Let op: V1 → RST = GPIO14 (geen 23); laptop→TX-link draait op **921600** (geen 420000).
+Let op: V1 → RST = GPIO14 (geen 23); laptop→TX-baud werkend gekregen (was 921600-notitie, bleek baud-mismatch met ruis als gevolg).
 - [x] LilyGO-RX flashen als DIY TTGO **V1** 900MHz RX + binden (LQ 100%)
 - [x] LilyGO-TX flashen als DIY TTGO **V1** 900MHz TX, CRSF op USB (3/1), handshake + OLED ok
 - [x] RcChannels: `arm/disarm` → één `armed: bool`, `rx.rs` mee omgezet

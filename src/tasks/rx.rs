@@ -26,7 +26,6 @@ pub async fn receiver_task(
                 if n % 100 == 0 {
                     defmt::info!("rc: {}", data);
                 }
-
                 if !data.armed {
                     SYSTEM.set_state(State::Disarmed);
                     // arm_start = None;

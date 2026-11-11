@@ -104,28 +104,28 @@ pub async fn attitude_task(
 
         total_duration_nanos += start.elapsed().as_nanos();
 
-        counter += 1.0;
-        if counter >= print_after_ticks {
-            counter = 0.0;
-            let avg_nanos = total_duration_nanos / print_after_ticks as u64;
-            let avg_us = avg_nanos / 1000;
-            let avg_frac = (avg_nanos % 1000) / 100;
-            total_duration_nanos = 0;
-
-            let rest = vqf.is_rest();
-
-            defmt::info!(
-                "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
-                avg_us,
-                avg_frac,
-                roll.to_degrees(),
-                pitch.to_degrees(),
-                yaw.to_degrees(),
-                set_rates.roll.to_degrees(),
-                set_rates.pitch.to_degrees(),
-                set_rates.yaw.to_degrees(),
-                rest
-            );
-        }
+        // counter += 1.0;
+        // if counter >= print_after_ticks {
+        //     counter = 0.0;
+        //     let avg_nanos = total_duration_nanos / print_after_ticks as u64;
+        //     let avg_us = avg_nanos / 1000;
+        //     let avg_frac = (avg_nanos % 1000) / 100;
+        //     total_duration_nanos = 0;
+        //
+        //     let rest = vqf.is_rest();
+        //
+        //     defmt::info!(
+        //         "[ATT  {}.{}µs] Euler: [R: {}°, P: {}°, Y: {}°] | Cmd: [R: {}°/s, P: {}°/s, Y: {}°/s] | Rest: {}",
+        //         avg_us,
+        //         avg_frac,
+        //         roll.to_degrees(),
+        //         pitch.to_degrees(),
+        //         yaw.to_degrees(),
+        //         set_rates.roll.to_degrees(),
+        //         set_rates.pitch.to_degrees(),
+        //         set_rates.yaw.to_degrees(),
+        //         rest
+        //     );
+        // }
     }
 }

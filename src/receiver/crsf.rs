@@ -7,6 +7,8 @@ use crate::sync::LAST_SMP;
 use crate::sync::PING_SIGNAL;
 use crate::sync::PidTune;
 use crate::sync::STREAM_ATOMICBOOL;
+use crate::sync::TUNING_CHANNEL;
+use crate::sync::TunAck;
 use crate::types::Rates;
 use crate::{boards::UartRead, sync::PID_VALS};
 use crc::{CRC_8_DVB_S2, Crc};
@@ -63,7 +65,11 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
             while let Some(res) = self.parser.next_raw_packet() {
                 match res {
                     Ok(raw) => {
-                        match raw.data().get(2) {
+                        let data_id = raw.data().get(2);
+                        if data_id.copied() != Some(0x16) {
+                            defmt::info!("CRSF: id: {}", data_id)
+                        };
+                        match data_id {
                             Some(0x16) => {
                                 let ch = Packet::from_raw(&raw);
                                 match ch {
@@ -76,7 +82,6 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
                             }
                             Some(0x7a) => {
                                 // Frame: [addr][len][type][dest][orig][func_lo][func_hi][payload..][crc]
-                                // body = frame zonder crc.
                                 let b = raw.data();
                                 let data = b.split_last();
                                 if let Some((crc_ref, body)) = data {
@@ -94,25 +99,78 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
                                             let func = u16::from_le_bytes([body[5], body[6]]);
                                             match TuningCmd::from_repr(func) {
                                                 Some(TuningCmd::Postcard) => {
-                                                    let Ok(msg) =
-                                                        postcard::from_bytes::<TuneMsg>(&body[7..])
-                                                    else {
-                                                        continue;
+                                                    let msg = match postcard::from_bytes::<TuneMsg>(
+                                                        &body[7..],
+                                                    ) {
+                                                        Ok(msg) => msg,
+                                                        Err(e) => {
+                                                            defmt::warn!(
+                                                                "crsf: postcard decode mislukt: {}",
+                                                                defmt::Debug2Format(&e)
+                                                            );
+                                                            continue;
+                                                        }
                                                     };
 
                                                     match msg {
                                                         TuneMsg::SetPid { axis, kp, ki, kd } => {
-                                                            if (axis as usize) < PID_VALS.len() {
-                                                                PID_VALS[axis as usize]
-                                                                    .set(PidTune { kp, ki, kd });
+                                                            let idx = axis as usize;
+                                                            let ok = idx < PID_VALS.len();
+                                                            if !ok {
+                                                                defmt::warn!(
+                                                                    "crsf: SetPid as buiten bereik: {}",
+                                                                    axis
+                                                                );
+                                                            }
+
+                                                            let current_vals = if ok {
+                                                                PID_VALS[idx].set(PidTune {
+                                                                    kp,
+                                                                    ki,
+                                                                    kd,
+                                                                });
+
+                                                                PID_VALS[idx].get()
+                                                            } else {
+                                                                PidTune { kp, ki, kd }
+                                                            };
+                                                            let ack = TunAck::Pid {
+                                                                axis,
+                                                                kp: current_vals.kp,
+                                                                ki: current_vals.ki,
+                                                                kd: current_vals.kd,
+                                                                ok,
+                                                            };
+                                                            if TUNING_CHANNEL.try_send(ack).is_err()
+                                                            {
+                                                                defmt::warn!(
+                                                                    "tunack dropped (channel full)"
+                                                                );
                                                             }
                                                         }
                                                         TuneMsg::SetFilter { gyro, lpf1, lpf2 } => {
-                                                            for (slot, v) in FILTER_CUTOFFS
-                                                                .iter()
-                                                                .zip([gyro, lpf1, lpf2])
+                                                            let ok = FILTER_CUTOFFS.len() == 3;
+                                                            if ok {
+                                                                for (slot, v) in FILTER_CUTOFFS
+                                                                    .iter()
+                                                                    .zip([gyro, lpf1, lpf2])
+                                                                {
+                                                                    slot.set(v);
+                                                                }
+                                                            }
+
+                                                            let ack = TunAck::Filter {
+                                                                gyro: FILTER_CUTOFFS[0].get(),
+                                                                lpf1: FILTER_CUTOFFS[1].get(),
+                                                                lpf2: FILTER_CUTOFFS[2].get(),
+                                                                ok,
+                                                            };
+
+                                                            if TUNING_CHANNEL.try_send(ack).is_err()
                                                             {
-                                                                slot.set(v);
+                                                                defmt::warn!(
+                                                                    "tunack dropped (channel full)"
+                                                                );
                                                             }
                                                         }
                                                     }
@@ -138,7 +196,12 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
                                                         PING_SIGNAL.signal((body.len() - 7, buf));
                                                     }
                                                 }
-                                                None => {}
+                                                None => {
+                                                    defmt::warn!(
+                                                        "crsf: onbekende sub-id: {:#06x}",
+                                                        func
+                                                    );
+                                                }
                                             }
                                         }
                                     } else {
@@ -153,7 +216,9 @@ impl<U: UartRead> Receiver for CrsfReceiver<U> {
                             _ => {}
                         }
                     }
-                    Err(_) => {}
+                    Err(e) => {
+                        defmt::warn!("CRSF: PacketError: {}", defmt::Debug2Format(&e))
+                    }
                 }
             }
         }
@@ -189,7 +254,7 @@ fn norm_stick(v: u16) -> f32 {
     ((v as f32 - 992.0) / span).clamp(-1.0, 1.0)
 }
 
-fn build_frame(addr: u8, frame_type: u8, payload: &[u8]) -> ([u8; 64], usize) {
+pub(crate) fn build_frame(addr: u8, frame_type: u8, payload: &[u8]) -> ([u8; 64], usize) {
     let mut buf = [0; 64];
     let payload_len = payload.len();
     buf[0] = addr;

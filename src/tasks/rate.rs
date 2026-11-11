@@ -85,6 +85,10 @@ pub async fn rate_task(
                         PID_VALS[YAW_AXIS].get(),
                     ];
                     rate_pids.set_all(gains);
+                    defmt::info!(
+                        "[RATE]: State changed to armed, pid vals updated to: {}",
+                        gains
+                    );
                 }
 
                 let sp = rate_setpoints.get();
@@ -119,49 +123,49 @@ pub async fn rate_task(
 
         total_duration_nanos += start.elapsed().as_nanos();
 
-        counter += 1.0;
-        if counter >= print_after_ticks {
-            counter = 0.0;
-            let avg_nanos = total_duration_nanos / print_after_ticks as u64;
-            let avg_us = avg_nanos / 1000;
-            let avg_frac = (avg_nanos % 1000) / 100;
-            total_duration_nanos = 0;
-
-            match telemetry {
-                Some((sp, pid, out)) => {
-                    defmt::info!(
-                        "[RATE {}.{}µs] [ARMED] Burst: {:?} | Set: {:?} | PID: {:?}",
-                        avg_us,
-                        avg_frac,
-                        burst,
-                        sp,
-                        pid
-                    );
-                    for i in 0..out.motor_count {
-                        defmt::info!("[ACT] M{}: {}", i, out.motors[i as usize]);
-                    }
-                    for i in 0..out.servo_count {
-                        defmt::info!("[ACT] S{}: {}µs", i, out.servo_us[i as usize]);
-                    }
-                    defmt::info!("[NOTCH] {:?}", hz);
-                }
-                None => {
-                    defmt::info!(
-                        "[RATE {}.{}µs] [STATE: {:?}] ArmBlocks: {:?}",
-                        avg_us,
-                        avg_frac,
-                        SYSTEM.get_state(),
-                        defmt::Debug2Format(&SYSTEM.get_arm_errors())
-                    );
-                    defmt::info!(
-                        "[ESC] ML {:?} | MR {:?}",
-                        esc_telemetry[0],
-                        esc_telemetry[1]
-                    );
-
-                    defmt::info!("[NOTCH] {:?}", hz);
-                }
-            }
-        }
+        // counter += 1.0;
+        // if counter >= print_after_ticks {
+        //     counter = 0.0;
+        //     let avg_nanos = total_duration_nanos / print_after_ticks as u64;
+        //     let avg_us = avg_nanos / 1000;
+        //     let avg_frac = (avg_nanos % 1000) / 100;
+        //     total_duration_nanos = 0;
+        //
+        //     match telemetry {
+        //         Some((sp, pid, out)) => {
+        //             defmt::info!(
+        //                 "[RATE {}.{}µs] [ARMED] Burst: {:?} | Set: {:?} | PID: {:?}",
+        //                 avg_us,
+        //                 avg_frac,
+        //                 burst,
+        //                 sp,
+        //                 pid
+        //             );
+        //             for i in 0..out.motor_count {
+        //                 defmt::info!("[ACT] M{}: {}", i, out.motors[i as usize]);
+        //             }
+        //             for i in 0..out.servo_count {
+        //                 defmt::info!("[ACT] S{}: {}µs", i, out.servo_us[i as usize]);
+        //             }
+        //             defmt::info!("[NOTCH] {:?}", hz);
+        //         }
+        //         None => {
+        //             defmt::info!(
+        //                 "[RATE {}.{}µs] [STATE: {:?}] ArmBlocks: {:?}",
+        //                 avg_us,
+        //                 avg_frac,
+        //                 SYSTEM.get_state(),
+        //                 defmt::Debug2Format(&SYSTEM.get_arm_errors())
+        //             );
+        //             defmt::info!(
+        //                 "[ESC] ML {:?} | MR {:?}",
+        //                 esc_telemetry[0],
+        //                 esc_telemetry[1]
+        //             );
+        //
+        //             defmt::info!("[NOTCH] {:?}", hz);
+        //         }
+        //     }
+        // }
     }
 }

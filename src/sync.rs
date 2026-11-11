@@ -8,8 +8,11 @@ use crate::{
     types::{ImuBurst, Rates},
 };
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
+use embassy_sync::{
+    blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
+    channel::Channel,
+};
 use heapless::spsc::{Consumer, Producer, Queue};
 
 pub static PING_SIGNAL: Signal<CriticalSectionRawMutex, (usize, [u8; 8])> = Signal::new();
@@ -77,7 +80,7 @@ pub struct AtomicPid {
 }
 
 // double with in config.rs and should be in types
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, defmt::Format)]
 pub struct PidTune {
     pub kp: f32,
     pub ki: f32,
@@ -146,3 +149,22 @@ pub static FILTER_CUTOFFS: [AtomicF32; 3] = [
 ];
 
 pub static STREAM_ATOMICBOOL: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub enum TunAck {
+    Pid {
+        axis: u8,
+        kp: f32,
+        ki: f32,
+        kd: f32,
+        ok: bool,
+    },
+    Filter {
+        gyro: f32,
+        lpf1: f32,
+        lpf2: f32,
+        ok: bool,
+    },
+}
+
+pub static TUNING_CHANNEL: Channel<CriticalSectionRawMutex, TunAck, 4> = Channel::new();

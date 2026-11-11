@@ -29,7 +29,7 @@ use crate::{
     sync::{AtomicF32, AtomicRates, ImuQueue},
     tasks::{
         attitude::attitude_task, esc_telemetry::esc_task, rate::rate_task, rx::receiver_task,
-        usb::usb_task,
+        tx::tx_telemetry_task, usb::usb_task,
     },
 };
 
@@ -66,6 +66,7 @@ async fn main(spawner: Spawner) {
 
     // Receiver task
     spawner.spawn(receiver_task(platform.rx, &THROTTLE, &PILOT_INPUT).unwrap());
+    spawner.spawn(tx_telemetry_task(platform.crsf_tx).unwrap());
     spawner.spawn(attitude_task(consumer, &PILOT_INPUT, &RATE_SETPOINTS).unwrap());
 
     spawner.spawn(usb_task(platform.usb_dev).unwrap());

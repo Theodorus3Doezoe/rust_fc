@@ -47,6 +47,14 @@ pub mod receiver {
 
     pub type Concrete = CrsfReceiver<<ActiveBoard as Board>::CrsfRx>;
 }
+
+pub mod transmitter {
+    use super::*;
+    use crate::boards::Board;
+    use crate::receiver::crsf::CrsfReceiver;
+
+    pub type Concrete = <ActiveBoard as Board>::CrsfTx;
+}
 pub mod esc {
     use super::*;
     use crate::actuators::provider::ActuatorProvider;
